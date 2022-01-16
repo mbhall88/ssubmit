@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{AppSettings,Parser};
 use regex::Regex;
 
 use ssubmit::{Memory, SlurmTime};
@@ -19,14 +19,18 @@ use ssubmit::{Memory, SlurmTime};
 /// $ ssubmit align -- minimap2 ref.fa reads.fq \| samtools sort -o sorted.bam
 #[derive(Parser, Debug)]
 #[clap(author, version, about, verbatim_doc_comment)]
+#[clap(global_setting(AppSettings::TrailingVarArg))]
+#[clap(global_setting(AppSettings::AllowHyphenValues))]
 pub struct Cli {
     /// Name of the job
     ///
     /// See `man sbatch | grep -A 2 'job-name='` for more details.
     pub name: String,
     /// Command to be executed by the job
-    #[clap(raw = true, required = true)]
-    pub command: Vec<String>,
+    pub command: String,
+    /// Options to be passed on to sbatch
+    #[clap(raw = true)]
+    pub remainder: Vec<String>,
     /// File to write job stdout to. (See `man sbatch | grep -A 3 'output='`)
     ///
     /// Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
@@ -50,7 +54,7 @@ pub struct Cli {
     )]
     pub memory: Memory,
     /// I only want to know about errors; my terminal is a temple
-    #[clap(short, long)]
+    #[clap(short = 'z')]
     pub quiet: bool,
     /// Time limit for the job. e.g. 5d, 10h, 45m21s (case insensitive)
     ///
