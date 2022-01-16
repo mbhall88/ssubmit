@@ -1,10 +1,14 @@
-use regex::Regex;
+use std::cmp::max;
 use std::fmt;
 use std::ops::{Div, Mul};
 use std::str::FromStr;
+use std::time::Duration;
+
+use log::warn;
+use regex::Regex;
 use thiserror::Error;
 
-static PREFIXES: &'static [MetricSuffix] = &[
+static PREFIXES: &[MetricSuffix] = &[
     MetricSuffix::Kilo,
     MetricSuffix::Mega,
     MetricSuffix::Giga,
@@ -16,11 +20,11 @@ pub fn format_number(amount: u64) -> String {
     let mut value = amount as f64;
     let mut prefix = 0;
     while value >= KILO && prefix < PREFIXES.len() {
-        value = value / KILO;
+        value /= KILO;
         prefix += 1;
     }
     if prefix == 0 {
-        eprintln!("[WARNING]: Memory provided was less than 1KB; defaulting to 1KB...");
+        warn!("Memory provided was less than 1KB; defaulting to 1KB...");
         prefix = 1;
         value = 1.0;
     }
@@ -147,9 +151,133 @@ impl Div<Memory> for u64 {
     }
 }
 
+pub trait SlurmTime {
+    fn to_slurm_time(&self) -> String;
+}
+
+impl SlurmTime for Duration {
+    fn to_slurm_time(&self) -> String {
+        if self.is_zero() {
+            return "0".to_string();
+        }
+
+        let mut remainder = max(self.as_secs(), 1);
+
+        if remainder < 60 {
+            // less than a minute
+            return format!("0:{}", remainder);
+        }
+
+        let secs = remainder % 60;
+        remainder /= 60;
+
+        if remainder < 60 {
+            // less than an hour
+            return format!("{}:{}", remainder, secs);
+        }
+
+        let mins = remainder % 60;
+        remainder /= 60;
+
+        format!("{}:{}:{}", remainder, mins, secs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
+
+    #[test]
+    fn test_to_slurm_zero() {
+        let one_milli = Duration::from_millis(0);
+
+        let actual = one_milli.to_slurm_time();
+        let expected = "0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_less_than_one_second() {
+        let one_milli = Duration::from_millis(6);
+
+        let actual = one_milli.to_slurm_time();
+        let expected = "0:1";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_less_than_one_minute() {
+        let secs = Duration::from_secs(6);
+
+        let actual = secs.to_slurm_time();
+        let expected = "0:6";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_less_than_one_hour() {
+        let secs = Duration::from_secs(64);
+
+        let actual = secs.to_slurm_time();
+        let expected = "1:4";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_minutes_with_remainder() {
+        let secs = Duration::from_secs(666);
+
+        let actual = secs.to_slurm_time();
+        let expected = "11:6";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_even_minutes() {
+        let secs = Duration::from_secs(60);
+
+        let actual = secs.to_slurm_time();
+        let expected = "1:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_even_hours() {
+        let secs = Duration::from_secs(60 * 60 * 4);
+
+        let actual = secs.to_slurm_time();
+        let expected = "4:0:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_hours_with_remainder() {
+        let secs = Duration::from_secs(9042);
+
+        let actual = secs.to_slurm_time();
+        let expected = "2:30:42";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_to_slurm_over_a_day() {
+        let secs = Duration::from_secs(561677);
+
+        let actual = secs.to_slurm_time();
+        let expected = "156:1:17";
+
+        assert_eq!(actual, expected)
+    }
 
     #[test]
     fn integer_only_returns_integer() {

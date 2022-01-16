@@ -1,6 +1,7 @@
 use clap::Parser;
+use regex::Regex;
 
-use ssubmit::Memory;
+use ssubmit::{Memory, SlurmTime};
 
 /// Submit sbatch jobs without having to create a submission script
 ///
@@ -48,5 +49,165 @@ pub struct Cli {
         default_value = "1G"
     )]
     pub memory: Memory,
-    // todo partition
+    /// I only want to know about errors; my terminal is a temple
+    #[clap(short, long)]
+    pub quiet: bool,
+    /// Time limit for the job. e.g. 5d, 10h, 45m21s (case insensitive)
+    ///
+    /// Run `man sbatch | grep -A 7 'time=<'` for more details.
+    #[clap(short, long, parse(from_str = parse_time), default_value = "1w")]
+    pub time: String,
+}
+
+fn parse_time(s: &str) -> String {
+    let re = Regex::new(r"(?P<unit>\d+[a-zA-Z]*)").unwrap();
+
+    let mut joined = String::new();
+    for cap in re.captures_iter(s) {
+        if joined.is_empty() {
+            joined.push_str(&cap["unit"])
+        } else {
+            joined.push_str(&*format!("+{}", &cap["unit"]))
+        }
+    }
+
+    match duration_str::parse(&joined) {
+        Ok(dur) => dur.to_slurm_time(),
+        Err(_) => s.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_time_milliseconds() {
+        let s = "4ms";
+
+        let actual = parse_time(s);
+        let expected = "0:1";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_seconds() {
+        let s = "4s";
+
+        let actual = parse_time(s);
+        let expected = "0:4";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_minutes() {
+        let s = "4m";
+
+        let actual = parse_time(s);
+        let expected = "4:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_hours_in_minutes() {
+        let s = "400m";
+
+        let actual = parse_time(s);
+        let expected = "6:40:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_hours() {
+        let s = "3H";
+
+        let actual = parse_time(s);
+        let expected = "3:0:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_hours_and_minutes() {
+        let s = "3h46min";
+
+        let actual = parse_time(s);
+        let expected = "3:46:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_hours_and_minutes_with_space() {
+        let s = "3h 46min";
+
+        let actual = parse_time(s);
+        let expected = "3:46:0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_days_and_seconds() {
+        let s = "1d4s";
+
+        let actual = parse_time(s);
+        let expected = "24:0:4";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_slurm_format_no_parsing() {
+        let s = "3:45";
+
+        let actual = parse_time(s);
+        let expected = "3:45";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_no_units() {
+        let s = "3";
+
+        let actual = parse_time(s);
+        let expected = "3";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_zero() {
+        let s = "0";
+
+        let actual = parse_time(s);
+        let expected = "0";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_float_not_supported() {
+        let s = "1.5d";
+
+        let actual = parse_time(s);
+        let expected = "1.5d";
+
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_time_missing_unit_is_seconds() {
+        let s = "5m3";
+
+        let actual = parse_time(s);
+        let expected = "5:3";
+
+        assert_eq!(actual, expected)
+    }
 }
