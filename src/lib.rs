@@ -16,7 +16,7 @@ static PREFIXES: &[MetricSuffix] = &[
 ];
 static KILO: f64 = 1000.0;
 static SCRIPT_TEMPLATE: &str = r#"$shebang$
-
+$set$
 #SBATCH --job-name=$name$
 #SBATCH --mem=$memory$
 #SBATCH --time=$time$
@@ -26,8 +26,10 @@ static SCRIPT_TEMPLATE: &str = r#"$shebang$
 $cmd$
 "#;
 
+#[allow(clippy::too_many_arguments)]
 pub fn make_submission_script(
     shebang: &str,
+    set: &str,
     name: &str,
     memory: &str,
     time: &str,
@@ -35,6 +37,10 @@ pub fn make_submission_script(
     output: &str,
     cmd: &str,
 ) -> String {
+    let mut set_line = String::new();
+    if !set.is_empty() {
+        set_line.push_str(&format!("set -{}", set));
+    }
     SCRIPT_TEMPLATE
         .replace("$shebang$", shebang)
         .replace("$name$", name)
@@ -43,6 +49,7 @@ pub fn make_submission_script(
         .replace("$error$", error)
         .replace("$output$", output)
         .replace("$cmd$", cmd)
+        .replace("$set$", &set_line)
 }
 
 pub fn format_number(amount: u64) -> String {
@@ -465,6 +472,7 @@ mod tests {
     #[test]
     fn test_make_submission_script() {
         let shebang = "#/bin/bash";
+        let set = "eux";
         let name = "job";
         let memory = "1M";
         let time = "5:56:00";
@@ -472,7 +480,34 @@ mod tests {
         let output = "%x.out";
         let cmd = "python -c 'print(1+1)'";
 
-        let actual = make_submission_script(shebang, name, memory, time, error, output, cmd);
+        let actual = make_submission_script(shebang, set, name, memory, time, error, output, cmd);
+        let expected = format!(
+            r#"{shebang}
+set -{set}
+#SBATCH --job-name={name}
+#SBATCH --mem={memory}
+#SBATCH --time={time}
+#SBATCH --error={error}
+#SBATCH --output={output}
+
+{cmd}
+"#
+        );
+        assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_make_submission_script_no_set() {
+        let shebang = "#/bin/bash";
+        let set = "";
+        let name = "job";
+        let memory = "1M";
+        let time = "5:56:00";
+        let error = "%x.err";
+        let output = "%x.out";
+        let cmd = "python -c 'print(1+1)'";
+
+        let actual = make_submission_script(shebang, set, name, memory, time, error, output, cmd);
         let expected = format!(
             r#"{shebang}
 

@@ -25,6 +25,7 @@ fn main() -> Result<()> {
 
     let script = make_submission_script(
         &args.shebang,
+        &args.set,
         &args.name,
         &memory,
         &args.time,

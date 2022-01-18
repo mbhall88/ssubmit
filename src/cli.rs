@@ -54,8 +54,14 @@ pub struct Cli {
     #[clap(short, long, parse(from_str = parse_time), default_value = "1w")]
     pub time: String,
     /// The shell shebang for the submission script
-    #[clap(short, long, default_value = "#!/usr/bin/env bash")]
+    #[clap(short = 'S', long, default_value = "#!/usr/bin/env bash")]
     pub shebang: String,
+    /// Options for the set command in the shell script
+    ///
+    /// For example, to exit when the command exits with a non-zero code and to treat unset
+    /// variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
+    #[clap(short, long, default_value = "eux")]
+    pub set: String,
     /// Print the sbatch command and submission script would be executed, but do not execute them
     #[clap(short = 'n', long)]
     pub dry_run: bool,
