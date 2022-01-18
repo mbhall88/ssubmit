@@ -1,4 +1,4 @@
-use clap::{AppSettings,Parser};
+use clap::{AppSettings, Parser};
 use regex::Regex;
 
 use ssubmit::{Memory, SlurmTime};
@@ -46,21 +46,19 @@ pub struct Cli {
     /// Note, floating point numbers will be rounded up. e.g., 10.1G will request 11G.
     /// This is because sbatch only allows integers. See `man sbatch | grep -A 4 'mem='`
     /// for the full details.
-    #[clap(
-        short = 'r',
-        long = "mem",
-        value_name = "size[units]",
-        default_value = "1G"
-    )]
+    #[clap(short, long = "mem", value_name = "size[units]", default_value = "1G")]
     pub memory: Memory,
-    /// I only want to know about errors; my terminal is a temple
-    #[clap(short = 'z')]
-    pub quiet: bool,
     /// Time limit for the job. e.g. 5d, 10h, 45m21s (case insensitive)
     ///
     /// Run `man sbatch | grep -A 7 'time=<'` for more details.
     #[clap(short, long, parse(from_str = parse_time), default_value = "1w")]
     pub time: String,
+    /// The shell shebang for the submission script
+    #[clap(short, long, default_value = "#!/usr/bin/env bash")]
+    pub shebang: String,
+    /// Print the sbatch command and submission script would be executed, but do not execute them
+    #[clap(short = 'n', long)]
+    pub dry_run: bool,
 }
 
 fn parse_time(s: &str) -> String {

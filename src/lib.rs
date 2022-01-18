@@ -15,6 +15,35 @@ static PREFIXES: &[MetricSuffix] = &[
     MetricSuffix::Tera,
 ];
 static KILO: f64 = 1000.0;
+static SCRIPT_TEMPLATE: &str = r#"$shebang$
+
+#SBATCH --job-name=$name$
+#SBATCH --mem=$memory$
+#SBATCH --time=$time$
+#SBATCH --error=$error$
+#SBATCH --output=$output$
+
+$cmd$
+"#;
+
+pub fn make_submission_script(
+    shebang: &str,
+    name: &str,
+    memory: &str,
+    time: &str,
+    error: &str,
+    output: &str,
+    cmd: &str,
+) -> String {
+    SCRIPT_TEMPLATE
+        .replace("$shebang$", shebang)
+        .replace("$name$", name)
+        .replace("$memory$", memory)
+        .replace("$time$", time)
+        .replace("$error$", error)
+        .replace("$output$", output)
+        .replace("$cmd$", cmd)
+}
 
 pub fn format_number(amount: u64) -> String {
     let mut value = amount as f64;
@@ -431,5 +460,31 @@ mod tests {
         assert_eq!(number, 50_700_000);
 
         assert_eq!(format_number(number), "51M")
+    }
+
+    #[test]
+    fn test_make_submission_script() {
+        let shebang = "#/bin/bash";
+        let name = "job";
+        let memory = "1M";
+        let time = "5:56:00";
+        let error = "%x.err";
+        let output = "%x.out";
+        let cmd = "python -c 'print(1+1)'";
+
+        let actual = make_submission_script(shebang, name, memory, time, error, output, cmd);
+        let expected = format!(
+            r#"{shebang}
+
+#SBATCH --job-name={name}
+#SBATCH --mem={memory}
+#SBATCH --time={time}
+#SBATCH --error={error}
+#SBATCH --output={output}
+
+{cmd}
+"#
+        );
+        assert_eq!(actual, expected)
     }
 }
