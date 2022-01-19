@@ -483,12 +483,12 @@ mod tests {
         let actual = make_submission_script(shebang, set, name, memory, time, error, output, cmd);
         let expected = format!(
             r#"{shebang}
-set -{set}
 #SBATCH --job-name={name}
 #SBATCH --mem={memory}
 #SBATCH --time={time}
 #SBATCH --error={error}
 #SBATCH --output={output}
+set -{set}
 
 {cmd}
 "#
@@ -510,12 +510,12 @@ set -{set}
         let actual = make_submission_script(shebang, set, name, memory, time, error, output, cmd);
         let expected = format!(
             r#"{shebang}
-
 #SBATCH --job-name={name}
 #SBATCH --mem={memory}
 #SBATCH --time={time}
 #SBATCH --error={error}
 #SBATCH --output={output}
+
 
 {cmd}
 "#
