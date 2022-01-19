@@ -86,7 +86,7 @@ Memory (`-m,--mem`) is intended to be a little more user-friendly than the `sbat
 --mem` option. For example, you can pass `-m 0.5g` and `ssubmit` will interpret and
 convert this as 500M. However, `-m 1.7G` will be rounded up to 2G. One place where this
 option differs from `sbatch` is that if you don't give units, it will be interpreted as
-bytes - i.e., `-m 1000` will be converted to 1K.
+bytes - i.e., `-m 1000` will be converted to 1K. Units are case insensitive.
 
 ### Time
 
