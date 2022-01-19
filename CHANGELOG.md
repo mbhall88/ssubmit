@@ -7,7 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.1]
 
+### Added
+
+- changelog
 
 ## [0.1.0]
 
@@ -16,5 +20,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Everthing!
 
 [0.1.0]: https://github.com/mbhall88/ssubmit/releases/tag/0.1.0
-[unreleased]: https://github.com/mbhall88/ssubmit/compare/0.1.0...HEAD
+[0.1.1]: https://github.com/mbhall88/ssubmit/releases/tag/0.1.1
+[unreleased]: https://github.com/mbhall88/ssubmit/compare/0.1.1...HEAD
 

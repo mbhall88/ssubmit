@@ -25,7 +25,7 @@ jobs and I don't want to fluff around with making a submission script.
 Run this little scriptlet or download for you system from the [releases page][releases].
 
 ```shell
-VERSION="0.1.0"  # ssubmit version you want
+VERSION="0.1.1"  # ssubmit version you want
 OS=$(uname -s)                                                                                                       
 if [ "$OS" = "Linux" ]; then                                                                                         
     triple="x86_64-unknown-linux-musl"                                                                              
@@ -146,7 +146,7 @@ You don't have to use patterns of course.
 
 ```shell
 $ ssubmit --help
-ssubmit 0.1.0
+ssubmit 0.1.1
 Michael Hall <michael@mbh.sh>
 Submit sbatch jobs without having to create a submission script
 
