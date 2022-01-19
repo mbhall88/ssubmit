@@ -1,5 +1,9 @@
 # ssubmit
 
+[![Rust CI](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/mbhall88/ssubmit/branch/main/graph/badge.svg?token=4O7HTGKD6Q)](https://codecov.io/gh/mbhall88/ssubmit)
+[![Crates.io](https://img.shields.io/crates/v/ssubmit.svg)](https://crates.io/crates/ssubmit)
+
 Submit sbatch jobs without having to create a submission script
 
 - [Motivation](#motivation)
