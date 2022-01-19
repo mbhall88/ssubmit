@@ -9,14 +9,14 @@ use ssubmit::{Memory, SlurmTime};
 /// # EXAMPLES
 /// -----------
 ///
-/// Submit a simple rsync command
+/// Submit a simple rsync command with a 600MB memory limit.
 ///
-/// $ ssubmit rsync_my_data -- rsync -az src/ dest/
+/// $ ssubmit -m 600m rsync_my_data "rsync -az src/ dest/"
 ///
-/// Submit a command that involves piping the output into another command. Note the
-/// pipe (`|`) is escaped. This also holds for any other special shell characters.
+/// Submit a command that involves piping the output into another command. sbatch options
+/// are passed after a `--`.
 ///
-/// $ ssubmit align -- minimap2 ref.fa reads.fq \| samtools sort -o sorted.bam
+/// $ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
 #[derive(Parser, Debug)]
 #[clap(author, version, about, verbatim_doc_comment)]
 #[clap(global_setting(AppSettings::TrailingVarArg))]
