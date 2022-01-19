@@ -16,12 +16,12 @@ static PREFIXES: &[MetricSuffix] = &[
 ];
 static KILO: f64 = 1000.0;
 static SCRIPT_TEMPLATE: &str = r#"$shebang$
-$set$
 #SBATCH --job-name=$name$
 #SBATCH --mem=$memory$
 #SBATCH --time=$time$
 #SBATCH --error=$error$
 #SBATCH --output=$output$
+$set$
 
 $cmd$
 "#;

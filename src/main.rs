@@ -66,7 +66,10 @@ fn main() -> Result<()> {
             .context("Failed to execute sbatch")?;
 
         match sbatch_output.status.code() {
-            Some(0) => info!("{}", String::from_utf8_lossy(&sbatch_output.stdout)),
+            Some(0) => info!(
+                "{}",
+                String::from_utf8_lossy(&sbatch_output.stdout).trim_end()
+            ),
             Some(c) => {
                 error!(
                     "Failed to submit job with exit code {c} and stderr {}",
