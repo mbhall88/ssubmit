@@ -17,10 +17,10 @@ categories = ["science", "command-line-utilities"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-clap = { version = "3", features = ["derive"] }
-anyhow = "1"
-thiserror = "1"
-regex = "1"
-log = "0.4"
-env_logger = "0.9"
-duration-str = "0.3"
+clap = { version = "3.2.8", features = ["derive"] }
+anyhow = "1.0.58"
+thiserror = "1.0.31"
+regex = "1.6.0"
+log = "0.4.17"
+env_logger = "0.9.0"
+duration-str = "0.4.0"
