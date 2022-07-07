@@ -25,7 +25,7 @@ jobs and I don't want to fluff around with making a submission script.
 Run this little scriptlet or download for you system from the [releases page][releases].
 
 ```shell
-VERSION="0.1.1"  # ssubmit version you want
+VERSION="0.2.0"  # ssubmit version you want
 OS=$(uname -s)                                                                                                       
 if [ "$OS" = "Linux" ]; then                                                                                         
     triple="x86_64-unknown-linux-musl"                                                                              
@@ -147,7 +147,7 @@ You don't have to use patterns of course.
 
 ```shell
 $ ssubmit --help
-ssubmit 0.1.1
+ssubmit 0.2.0
 Michael Hall <michael@mbh.sh>
 Submit sbatch jobs without having to create a submission script
 
@@ -216,7 +216,7 @@ OPTIONS:
             For example, to exit when the command exits with a non-zero code and to treat unset
             variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
 
-            [default: eux]
+            [default: "euxo pipefail"]
 
     -S, --shebang <SHEBANG>
             The shell shebang for the submission script
