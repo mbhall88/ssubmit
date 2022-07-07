@@ -97,8 +97,8 @@ bytes - i.e., `-m 1000` will be converted to 1K. Units are case insensitive.
 As with memory, time (`-t,--time`) is intended to be simple. If you want a time limit of
 three days, then just pass `-t 3d`. Want two and a half hours? Then `-t 2h30m` works. If
 you want to just use the default limit of your cluster, then just pass `-t 0`. You can
-also just pass the time format `sbatch` uses and this will be seamlessly passed on. For
-a full list of support time units, check out the
+also just pass the [time format `sbatch` uses](https://slurm.schedmd.com/sbatch.html#OPT_time) and this will be seamlessly passed on. For
+a full list of supported time units, check out the
 [`duration-str`](https://github.com/baoyachi/duration-str) repo.
 
 ### Dry run
