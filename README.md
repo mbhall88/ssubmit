@@ -118,7 +118,7 @@ sbatch -c 8 <script>
 #SBATCH --time=24:0:0
 #SBATCH --error=%x.err
 #SBATCH --output=%x.out
-set -eux
+set -euxo pipefail
 
 rsync -az src/ dest/
 =====<script>=====
@@ -129,10 +129,11 @@ rsync -az src/ dest/
 The default shebang for the script is `#!/usr/bin/env bash`. However, if you'd prefer
 something else, pass this with `-S,--shebang`.
 
-Additionally, we use `set -eux` by default, which will exit when a command exits with a
-non-zero exit code (`e`), error when trying to use an unset variable (`u`), and print
-all commands that were run to stderr (`x`). You can change these setting with
-`-s,--set`. You can turn this off by passing `-s ''`.
+Additionally, we use `set -euxo pipefail` by default, which will exit when a command exits with a
+non-zero exit code (`e`), error when trying to use an unset variable (`u`), print
+all commands that were run to stderr (`x`), and exit if a command in a pipeline fails 
+(`-o pipefail`). You can change these setting with `-s,--set`. You can turn this off 
+by passing `-s ''`.
 
 ### Log files
 

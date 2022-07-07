@@ -60,7 +60,7 @@ pub struct Cli {
     ///
     /// For example, to exit when the command exits with a non-zero code and to treat unset
     /// variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
-    #[clap(short, long, default_value = "eux")]
+    #[clap(short, long, default_value = "euxo pipefail")]
     pub set: String,
     /// Print the sbatch command and submission script would be executed, but do not execute them
     #[clap(short = 'n', long)]

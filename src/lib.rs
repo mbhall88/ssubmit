@@ -1,8 +1,9 @@
 use std::cmp::max;
 use std::fmt;
+use std::fmt::Write as _;
 use std::ops::{Div, Mul};
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::Duration; // import without risk of name clashing
 
 use log::warn;
 use regex::Regex;
@@ -39,7 +40,7 @@ pub fn make_submission_script(
 ) -> String {
     let mut set_line = String::new();
     if !set.is_empty() {
-        set_line.push_str(&format!("set -{}", set));
+        let _ = write!(set_line, "set -{}", set);
     }
     SCRIPT_TEMPLATE
         .replace("$shebang$", shebang)
