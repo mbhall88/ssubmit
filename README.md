@@ -81,7 +81,7 @@ ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
 `COMMAND` is what you want to be executed by the job. It **must** be quoted (single or
 double).
 
-`REMAINDER` is any (optional) `sbatch`-specific parameters you want to pass on. These
+`REMAINDER` is any (optional) [`sbatch`-specific options](https://slurm.schedmd.com/sbatch.html#lbAG) you want to pass on. These
 must follow a `--` after `COMMAND`.
 
 ### Memory
