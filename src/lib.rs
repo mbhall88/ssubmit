@@ -69,7 +69,7 @@ pub fn format_number(amount: u64) -> String {
 }
 /// A metric suffix is a unit suffix used to indicate the multiples of (in this case) base pairs.
 /// For instance, the metric suffix 'Kb' refers to kilobases. Therefore, 6.9kb means 6900 base pairs.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum MetricSuffix {
     Base,
     Kilo,
@@ -127,7 +127,7 @@ impl Mul<MetricSuffix> for f64 {
 }
 
 /// A collection of custom errors relating to the command line interface for this package.
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum CliError {
     /// Indicates that a string cannot be parsed into a [`MetricSuffix`](#metricsuffix).
     #[error("{0} is not a valid metric suffix")]
@@ -140,7 +140,7 @@ pub enum CliError {
 
 /// An object for collecting together methods for working with the genome size parameter for this
 /// package.
-#[derive(Debug, PartialOrd, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialOrd, PartialEq, Eq, Copy, Clone)]
 pub struct Memory(pub u64);
 
 /// Allow for comparison of a `u64` and a `Memory`.
