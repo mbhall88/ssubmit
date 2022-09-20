@@ -20,10 +20,6 @@ jobs and I don't want to fluff around with making a submission script.
 
 ## Install
 
-### Precompiled binary
-
-Run this little scriptlet or download for you system from the [releases page][releases].
-
 **tl;dr**
 
 ```shell
