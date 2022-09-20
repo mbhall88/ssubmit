@@ -24,22 +24,46 @@ jobs and I don't want to fluff around with making a submission script.
 
 Run this little scriptlet or download for you system from the [releases page][releases].
 
+**tl;dr**
+
 ```shell
-VERSION="0.2.0"  # ssubmit version you want
-OS=$(uname -s)                                                                                                       
-if [ "$OS" = "Linux" ]; then                                                                                         
-    triple="x86_64-unknown-linux-musl"                                                                              
-elif [ "$OS" = "Darwin" ]; then                                                                                        
-    triple="x86_64-apple-darwin"                                                         
-else                                                      
-    echo "ERROR: $OS not a recognised operating system"
-fi              
-if [ -n "$triple" ]; then   
-    URL="https://github.com/mbhall88/ssubmit/releases/download/${VERSION}/ssubmit-${VERSION}-${triple}.tar.gz"
-    wget "$URL" -O - | tar -xzf -
-    ./ssubmit --help             
-fi
+curl -sSL install.ssubmit.mbh.sh | sh
+# or with wget
+wget -nv -O - install.ssubmit.mbh.sh | sh
 ```
+
+You can pass options to the script like so
+
+```
+$ curl -sSL install.ssubmit.mbh.sh | sh -s -- --help
+install.sh [option]
+
+Fetch and install the latest version of ssubmit, if ssubmit is already
+installed it will be updated to the latest version.
+
+Options
+        -V, --verbose
+                Enable verbose output for the installer
+
+        -f, -y, --force, --yes
+                Skip the confirmation prompt during installation
+
+        -p, --platform
+                Override the platform identified by the installer [default: apple-darwin]
+
+        -b, --bin-dir
+                Override the bin installation directory [default: /usr/local/bin]
+
+        -a, --arch
+                Override the architecture identified by the installer [default: x86_64]
+
+        -B, --base-url
+                Override the base URL used for downloading releases [default: https://github.com/mbhall88/ssubmit/releases]
+
+        -h, --help
+                Display this help message
+```
+
 
 ### Cargo
 
