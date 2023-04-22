@@ -15,7 +15,7 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.58.1
+          - 1.63.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
@@ -44,7 +44,7 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.58.1
+          - 1.63.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
