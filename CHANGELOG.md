@@ -7,6 +7,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Small linting fixes and modernise CI
+
 ## [0.2.0]
 
 ### Changed

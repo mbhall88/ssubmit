@@ -75,7 +75,7 @@ fn parse_time(s: &str) -> String {
         if joined.is_empty() {
             joined.push_str(&cap["unit"])
         } else {
-            joined.push_str(&*format!("+{}", &cap["unit"]))
+            joined.push_str(&format!("+{}", &cap["unit"]))
         }
     }
 
