@@ -8,6 +8,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  cog_check_job:
+    runs-on: ubuntu-latest
+    name: check conventional commit compliance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # pick the pr HEAD instead of the merge commit only if it's a PR, otherwise use the default
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Conventional commit check
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          check-latest-tag-only: true
   check:
     name: Check Rust version ${{ matrix.rust }} on OS ${{ matrix.os }}
     strategy:
@@ -19,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -44,16 +58,17 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.63.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
+
+      - uses: taiki-e/install-action@just
 
       - uses: actions/cache@v3
         with:
@@ -64,7 +79,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run cargo test
-        run: cargo test -v --all-targets --no-fail-fast
+        run: just test
 
   fmt:
     name: Rustfmt
@@ -75,7 +90,7 @@ jobs:
           - stable
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,7 +110,7 @@ jobs:
           - stable
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -103,15 +118,17 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: clippy
 
+      - uses: taiki-e/install-action@just
+
       - name: Run cargo clippy
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: just lint
 
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -128,10 +145,10 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin@0.23.1
+          tool: cargo-tarpaulin,just
 
       - name: Run cargo-tarpaulin
-        run: cargo tarpaulin -t 300 -- --test-threads 1
+        run: just coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
