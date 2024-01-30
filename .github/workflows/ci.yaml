@@ -29,7 +29,6 @@ jobs:
         os: [ ubuntu-latest, macos-latest ]
         rust:
           - stable
-          - 1.63.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
