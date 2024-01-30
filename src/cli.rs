@@ -65,6 +65,10 @@ pub struct Cli {
     /// Print the sbatch command and submission script would be executed, but do not execute them
     #[clap(short = 'n', long)]
     pub dry_run: bool,
+    /// Return an estimate of when the job would be scheduled to run given the current
+    /// queue. No job is actually submitted. [sbatch --test-only]
+    #[clap(short = 'T', long)]
+    pub test_only: bool,
 }
 
 fn parse_time(s: &str) -> String {

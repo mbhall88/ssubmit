@@ -34,9 +34,25 @@ fn main() -> Result<()> {
         &args.command,
     );
 
+    let mut sbatch_opts = args.remainder.clone();
+
+    let test_only = if args.test_only {
+        sbatch_opts.push("--test-only".to_string());
+        true
+    } else {
+        let mut test_only = false;
+        for arg in &args.remainder {
+            if arg == "--test-only" {
+                test_only = true;
+                break;
+            }
+        }
+        test_only
+    };
+
     if args.dry_run {
         info!("Dry run requested. Nothing submitted");
-        let sbatch_opts: String = args.remainder.join(" ");
+        let sbatch_opts: String = sbatch_opts.join(" ");
         if sbatch_opts.is_empty() {
             println!("sbatch <script>")
         } else {
@@ -45,7 +61,7 @@ fn main() -> Result<()> {
         println!("=====<script>=====\n{script}=====<script>=====");
     } else {
         let mut sbatch_child = Command::new("sbatch")
-            .args(&args.remainder)
+            .args(&sbatch_opts)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -66,10 +82,22 @@ fn main() -> Result<()> {
             .context("Failed to execute sbatch")?;
 
         match sbatch_output.status.code() {
-            Some(0) => info!(
-                "{}",
-                String::from_utf8_lossy(&sbatch_output.stdout).trim_end()
-            ),
+            Some(0) => {
+                if test_only {
+                    for line in String::from_utf8_lossy(&sbatch_output.stderr).lines() {
+                        // the relevant line will be something like sbatch: Job 123456 to start at ...
+                        if line.starts_with("sbatch: Job") {
+                            info!("{}", line);
+                            break;
+                        }
+                    }
+                } else {
+                    info!(
+                        "{}",
+                        String::from_utf8_lossy(&sbatch_output.stdout).trim_end()
+                    )
+                };
+            }
             Some(c) => {
                 error!(
                     "Failed to submit job with exit code {c} and stderr {}",

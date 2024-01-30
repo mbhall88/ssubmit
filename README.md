@@ -250,6 +250,10 @@ OPTIONS:
 
             [default: 1w]
 
+    -T, --test-only
+            Return an estimate of when the job would be scheduled to run given the current queue. No
+            job is actually submitted. [sbatch --test-only]
+
     -V, --version
             Print version information
 ```
