@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/mbhall88/ssubmit/compare/0.3.0...1.0.0) (2024-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* improve memory parsing
+
+### Features
+
+* env vars for setting time, memory, shebang and set [[#5](https://github.com/mbhall88/ssubmit/issues/5)] ([9e87374](https://github.com/mbhall88/ssubmit/commit/9e87374c712085256fa5f220ee3a95f65bab92a4))
+* improve memory parsing ([74d2e0f](https://github.com/mbhall88/ssubmit/commit/74d2e0f77094c632c9f7afacfc98bc467f988238))
+
 ## [0.3.0](https://github.com/mbhall88/ssubmit/compare/0.2.0...0.3.0) (2024-01-30)
 
 
