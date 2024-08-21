@@ -110,7 +110,7 @@ Memory (`-m,--mem`) is intended to be a little more user-friendly than the `sbat
 --mem` option. For example, you can pass `-m 0.5g` and `ssubmit` will interpret and
 convert this as 500M. However, `-m 1.7G` will be rounded up to 2G. One place where this
 option differs from `sbatch` is that if you don't give units, it will be interpreted as
-bytes - i.e., `-m 1000` will be converted to 1K. Units are case insensitive.
+bytes - i.e., `-m 1000` will be converted to 1K. Units are case-insensitive.
 
 ### Time
 
@@ -119,7 +119,8 @@ three days, then just pass `-t 3d`. Want two and a half hours? Then `-t 2h30m` w
 you want to just use the default limit of your cluster, then just pass `-t 0`. You can
 also just pass the [time format `sbatch` uses](https://slurm.schedmd.com/sbatch.html#OPT_time) and this will be seamlessly passed on. For
 a full list of supported time units, check out the
-[`duration-str`](https://github.com/baoyachi/duration-str) repo.
+[`duration-str`](https://github.com/baoyachi/duration-str) repo. One thing to note is that passing a single digit, without a unit, will be interpreted by 
+slurm as minutes. However, not providing a unit in the example of `5m3` will be interpreted as 5 minutes and 3 seconds.
 
 ### Dry run
 
