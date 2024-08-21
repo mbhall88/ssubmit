@@ -19,11 +19,11 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 clap = { version = "4.5.16", features = ["derive", "env"] }
 anyhow = "1.0.86"
-thiserror = "1.0.63"
 regex = "1.10.6"
 log = "0.4.22"
 env_logger = "0.11.5"
 duration-str = "0.11.2"
+byte-unit = "5.1.4"
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.

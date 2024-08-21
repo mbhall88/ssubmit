@@ -5,7 +5,7 @@ use log::{error, info, LevelFilter};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use ssubmit::{format_number, make_submission_script};
+use ssubmit::make_submission_script;
 
 use crate::cli::Cli;
 
@@ -21,13 +21,11 @@ fn main() -> Result<()> {
         .format_module_path(false)
         .init();
 
-    let memory = format_number(args.memory.0);
-
     let script = make_submission_script(
         &args.shebang,
         &args.set,
         &args.name,
-        &memory,
+        &args.memory,
         &args.time,
         &args.error,
         &args.output,
