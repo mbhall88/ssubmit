@@ -4,6 +4,11 @@ use regex::Regex;
 
 use ssubmit::SlurmTime;
 
+const SSUBMIT_SHEBANG: &str = "SSUBMIT_SHEBANG";
+const SSUBMIT_MEMORY: &str = "SSUBMIT_MEMORY";
+const SSUUBMIT_TIME: &str = "SSUBMIT_TIME";
+const SSUBMIT_SET: &str = "SSUBMIT_SET";
+
 /// Submit sbatch jobs without having to create a submission script
 ///
 /// -----------
@@ -47,17 +52,17 @@ pub struct Cli {
     /// be rounded up to the nearest megabyte. If the value is less than 1M, it will be rounded up
     /// to the nearest kilobyte.
     /// See `man sbatch | grep -A 4 'mem='` for the full details.
-    #[arg(short, long = "mem", value_name = "size[unit]", default_value = "1G", value_parser = parse_memory)]
+    #[arg(short, long = "mem", value_name = "size[unit]", default_value = "1G", value_parser = parse_memory, env = SSUBMIT_MEMORY)]
     pub memory: String,
     /// Time limit for the job. e.g. 5d, 10h, 45m21s (case-insensitive)
     ///
     /// Run `man sbatch | grep -A 7 'time=<'` for more details. If a single digit is passed, it will
     /// be passed straight to sbatch (i.e. minutes). However, 5m5 will be considered 5 minutes and
     /// 5 seconds.
-    #[arg(short, long, value_parser = parse_time, default_value = "1w")]
+    #[arg(short, long, value_parser = parse_time, default_value = "1d", env = SSUUBMIT_TIME)]
     pub time: String,
     /// The shell shebang for the submission script
-    #[arg(short = 'S', long, default_value = "#!/usr/bin/env bash")]
+    #[arg(short = 'S', long, default_value = "#!/usr/bin/env bash", env = SSUBMIT_SHEBANG)]
     pub shebang: String,
     /// Options for the set command in the shell script
     ///
@@ -67,10 +72,11 @@ pub struct Cli {
         short,
         long,
         default_value = "euxo pipefail",
-        allow_hyphen_values = true
+        allow_hyphen_values = true,
+        env = SSUBMIT_SET
     )]
     pub set: String,
-    /// Print the sbatch command and submission script would be executed, but do not execute them
+    /// Print the sbatch command and submission script that would be executed, but do not execute them
     #[arg(short = 'n', long)]
     pub dry_run: bool,
     /// Return an estimate of when the job would be scheduled to run given the current
@@ -458,6 +464,71 @@ mod tests {
         let s = "0";
         let actual = parse_memory(s).unwrap();
         let expected = "0";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cli_parse_remainder() {
+        let args = Cli::parse_from(["ssubmit", "name", "command", "--", "-c", "8"]);
+
+        let actual = args.remainder.join(" ");
+        let expected = "-c 8";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cli_parse_set_shebang_with_environment_variable() {
+        let shebang = "#!/bin/zsh";
+        unsafe {
+            std::env::set_var(SSUBMIT_SHEBANG, shebang);
+        }
+
+        let args = Cli::parse_from(["ssubmit", "name", "command"]);
+
+        let actual = args.shebang;
+        let expected = shebang;
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cli_parse_set_memory_with_environment_variable() {
+        let memory = "4M";
+        unsafe {
+            std::env::set_var(SSUBMIT_MEMORY, memory);
+        }
+
+        let args = Cli::parse_from(["ssubmit", "name", "command"]);
+
+        let actual = args.memory;
+        let expected = memory;
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cli_parse_set_time_with_environment_variable() {
+        let time = "1:0";
+        unsafe {
+            std::env::set_var(SSUUBMIT_TIME, time);
+        }
+
+        let args = Cli::parse_from(["ssubmit", "name", "command"]);
+
+        let actual = args.time;
+        let expected = time;
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_cli_parse_set_with_environment_variable() {
+        let set = "eu";
+        unsafe {
+            std::env::set_var(SSUBMIT_SET, set);
+        }
+
+        let args = Cli::parse_from(["ssubmit", "name", "command"]);
+
+        let actual = args.set;
+        let expected = set;
         assert_eq!(actual, expected);
     }
 }

@@ -90,6 +90,30 @@ Submit a job that needs 8 CPUs
 $ ssubmit -m 16g -t 1d align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
 ```
 
+```
+$ ssubmit -h
+Submit sbatch jobs without having to create a submission script
+
+Usage: ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
+
+Arguments:
+  <NAME>          Name of the job
+  <COMMAND>       Command to be executed by the job
+  [REMAINDER]...  Options to be passed on to sbatch
+
+Options:
+  -o, --output <OUTPUT>    File to write job stdout to. (See `man sbatch | grep -A 3 'output='`) [default: %x.out]
+  -e, --error <ERROR>      File to write job stderr to. (See `man sbatch | grep -A 3 'error='`) [default: %x.err]
+  -m, --mem <size[unit]>   Specify the real memory required per node. e.g., 4.3kb, 7 Gb, 9000, 4.1MB become 5KB, 7000M, 9000M, and 5M, respectively [env: SSUBMIT_MEMORY=] [default: 1G]
+  -t, --time <TIME>        Time limit for the job. e.g. 5d, 10h, 45m21s (case-insensitive) [env: SSUBMIT_TIME=] [default: 1d]
+  -S, --shebang <SHEBANG>  The shell shebang for the submission script [env: SSUBMIT_SHEBANG=] [default: "#!/usr/bin/env bash"]
+  -s, --set <SET>          Options for the set command in the shell script [env: SSUBMIT_SET=] [default: "euxo pipefail"]
+  -n, --dry-run            Print the sbatch command and submission script that would be executed, but do not execute them
+  -T, --test-only          Return an estimate of when the job would be scheduled to run given the current queue. No job is actually submitted. [sbatch --test-only]
+  -h, --help               Print help (see more with '--help')
+  -V, --version            Print version
+```
+
 The basic anatomy of a `ssubmit` call is
 
 ```
@@ -114,6 +138,8 @@ For example, 1.1M will be rounded up to 2M. If you want to use the default memor
 
 For simplicity's sake, all values over one megabyte are passed to sbatch as megabytes - e.g., 1.1G will be passed as 1100M.
 
+The environment variable `SSUBMIT_MEM` can be set to a default memory limit. This can be overridden by passing `-m`.
+
 ### Time
 
 As with memory, time (`-t,--time`) is intended to be simple. If you want a time limit of
@@ -123,6 +149,8 @@ also just pass the [time format `sbatch` uses](https://slurm.schedmd.com/sbatch.
 a full list of supported time units, check out the
 [`duration-str`](https://github.com/baoyachi/duration-str) repo. One thing to note is that passing a single digit, without a unit, will be interpreted by 
 slurm as minutes. However, not providing a unit in the example of `5m3` will be interpreted as 5 minutes and 3 seconds.
+
+The environment variable `SSUBMIT_TIME` can be set to a default time limit. This can be overridden by passing `-t`.
 
 ### Dry run
 
@@ -137,7 +165,7 @@ sbatch -c 8 <script>
 =====<script>=====
 #!/usr/bin/env bash
 #SBATCH --job-name=dry
-#SBATCH --mem=4G
+#SBATCH --mem=4000M
 #SBATCH --time=24:0:0
 #SBATCH --error=%x.err
 #SBATCH --output=%x.out
@@ -150,12 +178,12 @@ rsync -az src/ dest/
 ### Script settings
 
 The default shebang for the script is `#!/usr/bin/env bash`. However, if you'd prefer
-something else, pass this with `-S,--shebang`.
+something else, pass this with `-S,--shebang` or set the environment variable `SSUBMIT_SHEBANG`.
 
 Additionally, we use `set -euxo pipefail` by default, which will exit when a command exits with a
 non-zero exit code (`e`), error when trying to use an unset variable (`u`), print
 all commands that were run to stderr (`x`), and exit if a command in a pipeline fails 
-(`-o pipefail`). You can change these setting with `-s,--set`. You can turn this off 
+(`-o pipefail`). You can change these setting with `-s,--set` or the environment variable `SSUBMIT_SET`. You can turn this off 
 by passing `-s ''`.
 
 ### Log files
@@ -168,7 +196,7 @@ You don't have to use patterns of course.
 
 ### Full usage
 
-```shell
+```
 $ ssubmit --help
 ssubmit 0.2.0
 Michael Hall <michael@mbh.sh>
@@ -186,79 +214,91 @@ Submit a command that involves piping the output into another command. sbatch op
 are passed after a `--`.
 
 $ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
+Submit sbatch jobs without having to create a submission script
 
-USAGE:
-    ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
+-----------
+# EXAMPLES
+-----------
 
-ARGS:
-    <NAME>
-            Name of the job
+Submit a simple rsync command with a 600MB memory limit.
 
-            See `man sbatch | grep -A 2 'job-name='` for more details.
+$ ssubmit -m 600m rsync_my_data "rsync -az src/ dest/"
 
-    <COMMAND>
-            Command to be executed by the job
+Submit a command that involves piping the output into another command. sbatch options
+are passed after a `--`.
 
-    <REMAINDER>...
-            Options to be passed on to sbatch
+$ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
 
-OPTIONS:
-    -e, --error <ERROR>
-            File to write job stderr to. (See `man sbatch | grep -A 3 'error='`)
+Usage: ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
 
-            Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
+Arguments:
+  <NAME>
+          Name of the job
 
-            [default: %x.err]
+          See `man sbatch | grep -A 2 'job-name='` for more details.
 
-    -h, --help
-            Print help information
+  <COMMAND>
+          Command to be executed by the job
 
-    -m, --mem <size[units]>
-            Specify the real memory required per node. e.g., 4.3kb, 7G, 9000, 4.1MB
+  [REMAINDER]...
+          Options to be passed on to sbatch
 
-            Note, floating point numbers will be rounded up. e.g., 10.1G will request 11G. This is
-            because sbatch only allows integers. See `man sbatch | grep -A 4 'mem='` for the full
-            details.
+Options:
+  -o, --output <OUTPUT>
+          File to write job stdout to. (See `man sbatch | grep -A 3 'output='`)
 
-            [default: 1G]
+          Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
 
-    -n, --dry-run
-            Print the sbatch command and submission script would be executed, but do not execute
-            them
+          [default: %x.out]
 
-    -o, --output <OUTPUT>
-            File to write job stdout to. (See `man sbatch | grep -A 3 'output='`)
+  -e, --error <ERROR>
+          File to write job stderr to. (See `man sbatch | grep -A 3 'error='`)
 
-            Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
+          Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
 
-            [default: %x.out]
+          [default: %x.err]
 
-    -s, --set <SET>
-            Options for the set command in the shell script
+  -m, --mem <size[unit]>
+          Specify the real memory required per node. e.g., 4.3kb, 7 Gb, 9000, 4.1MB become 5KB, 7000M, 9000M, and 5M, respectively.
 
-            For example, to exit when the command exits with a non-zero code and to treat unset
-            variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
+          If no unit is specified, megabytes will be used, as per the sbatch default. The value will be rounded up to the nearest megabyte. If the value is less than 1M, it will be rounded up to the nearest kilobyte. See `man sbatch | grep -A 4 'mem='` for the full details.
 
-            [default: "euxo pipefail"]
+          [env: SSUBMIT_MEMORY=]
+          [default: 1G]
 
-    -S, --shebang <SHEBANG>
-            The shell shebang for the submission script
+  -t, --time <TIME>
+          Time limit for the job. e.g. 5d, 10h, 45m21s (case-insensitive)
 
-            [default: "#!/usr/bin/env bash"]
+          Run `man sbatch | grep -A 7 'time=<'` for more details. If a single digit is passed, it will be passed straight to sbatch (i.e. minutes). However, 5m5 will be considered 5 minutes and 5 seconds.
 
-    -t, --time <TIME>
-            Time limit for the job. e.g. 5d, 10h, 45m21s (case insensitive)
+          [env: SSUBMIT_TIME=]
+          [default: 1d]
 
-            Run `man sbatch | grep -A 7 'time=<'` for more details.
+  -S, --shebang <SHEBANG>
+          The shell shebang for the submission script
 
-            [default: 1w]
+          [env: SSUBMIT_SHEBANG=]
+          [default: "#!/usr/bin/env bash"]
 
-    -T, --test-only
-            Return an estimate of when the job would be scheduled to run given the current queue. No
-            job is actually submitted. [sbatch --test-only]
+  -s, --set <SET>
+          Options for the set command in the shell script
 
-    -V, --version
-            Print version information
+          For example, to exit when the command exits with a non-zero code and to treat unset variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
+
+          [env: SSUBMIT_SET=]
+          [default: "euxo pipefail"]
+
+  -n, --dry-run
+          Print the sbatch command and submission script that would be executed, but do not execute them
+
+  -T, --test-only
+          Return an estimate of when the job would be scheduled to run given the current queue. No job is actually submitted. [sbatch --test-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 
