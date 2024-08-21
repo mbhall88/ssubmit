@@ -1,7 +1,8 @@
-use clap::{Parser};
+use byte_unit::{Byte, Unit};
+use clap::Parser;
 use regex::Regex;
 
-use ssubmit::{Memory, SlurmTime};
+use ssubmit::SlurmTime;
 
 /// Submit sbatch jobs without having to create a submission script
 ///
@@ -39,14 +40,16 @@ pub struct Cli {
     /// Run `man sbatch | grep -A 37 '^filename pattern'` to see available patterns.
     #[arg(short, long, default_value = "%x.err")]
     pub error: String,
-    /// Specify the real memory required per node. e.g., 4.3kb, 7G, 9000, 4.1MB
+    /// Specify the real memory required per node. e.g., 4.3kb, 7 Gb, 9000, 4.1MB become 5KB, 7000M,
+    /// 9000M, and 5M, respectively.
     ///
-    /// Note, floating point numbers will be rounded up. e.g., 10.1G will request 11G.
-    /// This is because sbatch only allows integers. See `man sbatch | grep -A 4 'mem='`
-    /// for the full details.
-    #[arg(short, long = "mem", value_name = "size[units]", default_value = "1G")]
-    pub memory: Memory,
-    /// Time limit for the job. e.g. 5d, 10h, 45m21s (case insensitive)
+    /// If no unit is specified, megabytes will be used, as per the sbatch default. The value will
+    /// be rounded up to the nearest megabyte. If the value is less than 1M, it will be rounded up
+    /// to the nearest kilobyte.
+    /// See `man sbatch | grep -A 4 'mem='` for the full details.
+    #[arg(short, long = "mem", value_name = "size[unit]", default_value = "1G", value_parser = parse_memory)]
+    pub memory: String,
+    /// Time limit for the job. e.g. 5d, 10h, 45m21s (case-insensitive)
     ///
     /// Run `man sbatch | grep -A 7 'time=<'` for more details. If a single digit is passed, it will
     /// be passed straight to sbatch (i.e. minutes). However, 5m5 will be considered 5 minutes and
@@ -60,7 +63,12 @@ pub struct Cli {
     ///
     /// For example, to exit when the command exits with a non-zero code and to treat unset
     /// variables as an error during substitution, pass 'eu'. Pass '' or "" to set nothing
-    #[arg(short, long, default_value = "euxo pipefail", allow_hyphen_values = true)]
+    #[arg(
+        short,
+        long,
+        default_value = "euxo pipefail",
+        allow_hyphen_values = true
+    )]
     pub set: String,
     /// Print the sbatch command and submission script would be executed, but do not execute them
     #[arg(short = 'n', long)]
@@ -71,8 +79,23 @@ pub struct Cli {
     pub test_only: bool,
 }
 
+/// Parse a time string into a slurm time format
+///
+/// # Examples
+///
+/// ```
+/// use ssubmit::parse_time;
+///
+/// let s = "5m3s";
+/// let actual = parse_time(s).unwrap();
+/// let expected = "5:3";
+/// assert_eq!(actual, expected)
+/// ```
 fn parse_time(s: &str) -> Result<String, String> {
-    let slurm_time_re = Regex::new(r"^(?:(?P<days>\d+)-)?(?:(?P<hours>\d+):)?(?:(?P<minutes>\d+):)?(?P<seconds>\d+)?$").map_err(|e| e.to_string())?;
+    let slurm_time_re = Regex::new(
+        r"^(?:(?P<days>\d+)-)?(?:(?P<hours>\d+):)?(?:(?P<minutes>\d+):)?(?P<seconds>\d+)?$",
+    )
+    .map_err(|e| e.to_string())?;
 
     if slurm_time_re.is_match(s) {
         return Ok(s.to_string());
@@ -82,6 +105,44 @@ fn parse_time(s: &str) -> Result<String, String> {
         Ok(dur) => Ok(dur.to_slurm_time()),
         Err(e) => Err(format!("{s} is not a valid time: {e}")),
     }
+}
+
+/// Parse a memory size string into a slurm memory format
+///
+/// # Examples
+///
+/// ```
+/// use ssubmit::parse_memory;
+///
+/// let s = "4mb";
+/// let actual = parse_memory(s).unwrap();
+/// let expected = "4M";
+/// assert_eq!(actual, expected)
+/// ```
+fn parse_memory(s: &str) -> Result<String, String> {
+    if s == "0" {
+        return Ok(s.to_string());
+    }
+
+    let s = if s.chars().all(|c| !c.is_ascii_alphabetic()) {
+        format!("{}M", s)
+    } else {
+        s.to_string()
+    };
+
+    let ignore_case = true;
+    let bytes = Byte::parse_str(s, ignore_case).map_err(|e| e.to_string())?;
+    let mb = bytes.get_adjusted_unit(Unit::MB);
+    let (value, unit) = match mb.get_value() {
+        f if f < 1.0 => {
+            let kb = bytes.get_adjusted_unit(Unit::KB);
+            (kb.get_value(), "K")
+        }
+        f => (f, "M"),
+    };
+    // round up value to the nearest integer
+    let value = value.ceil() as u64;
+    Ok(format!("{}{}", value, unit))
 }
 
 #[cfg(test)]
@@ -255,5 +316,148 @@ mod tests {
         let expected = "5:3";
 
         assert_eq!(actual, expected)
+    }
+
+    #[test]
+    fn test_parse_memory_kilobytes() {
+        let s = "4kb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4K";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_kilobytes_over_megabyte_rounds() {
+        let s = "4000kb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_megabytes() {
+        let s = "4mb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_megabytes_single_m() {
+        let s = "4m";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_megabytes_single_m_upper() {
+        let s = "4M";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_megabytes_single_m_upper_space() {
+        let s = "4 M";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_megabytes_one_upper_one_lower_space() {
+        let s = "4 Mb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "4M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_gigabytes() {
+        let s = "5g";
+        let actual = parse_memory(s).unwrap();
+        let expected = "5000M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_terabytes() {
+        let s = "1t";
+        let actual = parse_memory(s).unwrap();
+        let expected = "1000000M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_float() {
+        let s = "1.5gb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "1500M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_float_round_up() {
+        let s = "50.7mb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "51M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_float_round_up_if_below_half() {
+        let s = "50.1mb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "51M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_always_round_up() {
+        let s = "5001kb";
+        let actual = parse_memory(s).unwrap();
+        let expected = "6M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_float_less_than_megabyte_returns_kilobyte() {
+        let s = "0.56M";
+        let actual = parse_memory(s).unwrap();
+        let expected = "560K";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_no_unit() {
+        let s = "5000";
+        let actual = parse_memory(s).unwrap();
+        let expected = "5000M";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_memory_less_than_kilobyte() {
+        let s = "50b";
+        let actual = parse_memory(s).unwrap();
+        let expected = "1K";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parse_memory_invalid_unit() {
+        let s = "5z";
+        let actual = parse_memory(s).unwrap_err();
+        assert!(actual.starts_with("the character 'z' is incorrect"));
+    }
+
+    #[test]
+    fn parse_memory_zero() {
+        let s = "0";
+        let actual = parse_memory(s).unwrap();
+        let expected = "0";
+        assert_eq!(actual, expected);
     }
 }
