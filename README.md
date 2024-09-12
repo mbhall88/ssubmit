@@ -1,10 +1,12 @@
 # ssubmit
 
 [![Rust CI](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/mbhall88/ssubmit/branch/main/graph/badge.svg?token=4O7HTGKD6Q)](https://codecov.io/gh/mbhall88/ssubmit)
-[![Crates.io](https://img.shields.io/crates/v/ssubmit.svg)](https://crates.io/crates/ssubmit)
+![GitHub Release](https://img.shields.io/github/v/release/mbhall88/ssubmit)
+![GitHub License](https://img.shields.io/github/license/mbhall88/ssubmit)
 
-Submit sbatch jobs without having to create a submission script
+
+
+Submit `sbatch` jobs without having to create a submission script
 
 - [Motivation](#motivation)
 - [Install](#install)
@@ -13,7 +15,7 @@ Submit sbatch jobs without having to create a submission script
 
 ## Motivation
 
-This project is motivated by the fact that I want to just be able to submit commands as
+This project is motivated by the fact that I want to just be able to submit commands to slurm as
 jobs and I don't want to fluff around with making a submission script.
 
 `ssubmit` wraps that whole process and lets you live your best lyf #blessed.
@@ -62,6 +64,10 @@ Options
 
 
 ### Cargo
+
+[![Crates.io](https://img.shields.io/crates/v/ssubmit.svg)](https://crates.io/crates/ssubmit)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/ssubmit)
+
 
 ```shell
 $ cargo install ssubmit
