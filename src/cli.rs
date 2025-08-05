@@ -1,5 +1,6 @@
 use byte_unit::{Byte, Unit};
 use clap::Parser;
+use log::info;
 use regex::Regex;
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
@@ -198,7 +199,9 @@ impl Cli {
             // For interactive jobs, command is optional and defaults to shell
             Ok(self.command.clone().unwrap_or_else(|| {
                 let shell = if self.shell == "auto" {
-                    get_user_shell()
+                    let sh = get_user_shell();
+                    info!("Inferred shell for interactive session is {sh}");
+                    sh
                 } else {
                     self.shell.clone()
                 };
