@@ -133,8 +133,10 @@ fn handle_interactive_job(args: &Cli, command: &str) -> Result<()> {
     // Add any additional options from remainder
     salloc_args.extend(args.remainder.clone());
 
-    // Add the srun command
-    salloc_args.push(command.to_string());
+    // Parse the command into separate arguments for salloc
+    // Split on whitespace but preserve quoted strings
+    let command_parts: Vec<&str> = command.split_whitespace().collect();
+    salloc_args.extend(command_parts.iter().map(|s| s.to_string()));
 
     if args.dry_run {
         info!("Dry run requested. Nothing submitted");
