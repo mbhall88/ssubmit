@@ -28,7 +28,7 @@ pub fn make_submission_script(
 ) -> String {
     let mut set_line = String::new();
     if !set.is_empty() {
-        let _ = write!(set_line, "set -{}", set);
+        let _ = write!(set_line, "set -{set}");
     }
     let script = SCRIPT_TEMPLATE
         .replace("$shebang$", shebang)
@@ -66,7 +66,7 @@ impl SlurmTime for Duration {
 
         if remainder < 60 {
             // less than a minute
-            return format!("0:{}", remainder);
+            return format!("0:{remainder}");
         }
 
         let secs = remainder % 60;
@@ -74,13 +74,13 @@ impl SlurmTime for Duration {
 
         if remainder < 60 {
             // less than an hour
-            return format!("{}:{}", remainder, secs);
+            return format!("{remainder}:{secs}");
         }
 
         let mins = remainder % 60;
         remainder /= 60;
 
-        format!("{}:{}:{}", remainder, mins, secs)
+        format!("{remainder}:{mins}:{secs}")
     }
 }
 

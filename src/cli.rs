@@ -1,6 +1,7 @@
 use byte_unit::{Byte, Unit};
 use clap::Parser;
 use regex::Regex;
+use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
 use ssubmit::SlurmTime;
 
@@ -23,6 +24,14 @@ const SSUBMIT_SET: &str = "SSUBMIT_SET";
 /// are passed after a `--`.
 ///
 /// $ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
+///
+/// Start an interactive session with 5GB memory for 8 hours.
+///
+/// $ ssubmit --interactive -m 5G -t 8h interactiveJob
+///
+/// Start an interactive session with custom shell and additional SLURM options.
+///
+/// $ ssubmit --interactive -m 16G -t 4h DevSession --shell bash -- --partition=general --qos=normal
 #[derive(Parser, Debug)]
 #[clap(author, version, about, verbatim_doc_comment)]
 pub struct Cli {
@@ -31,8 +40,11 @@ pub struct Cli {
     /// See `man sbatch | grep -A 2 'job-name='` for more details.
     pub name: String,
     /// Command to be executed by the job
-    pub command: String,
-    /// Options to be passed on to sbatch
+    ///
+    /// For batch jobs, this is required. For interactive jobs (--interactive),
+    /// this is optional and defaults to starting a shell session.
+    pub command: Option<String>,
+    /// Options to be passed on to sbatch or salloc (for interactive jobs)
     #[arg(raw = true, last = true, allow_hyphen_values = true)]
     pub remainder: Vec<String>,
     /// File to write job stdout to. (See `man sbatch | grep -A 3 'output='`)
@@ -83,6 +95,122 @@ pub struct Cli {
     /// queue. No job is actually submitted. [sbatch --test-only]
     #[arg(short = 'T', long)]
     pub test_only: bool,
+    /// Request an interactive job session instead of a batch job
+    ///
+    /// This will use `salloc` instead of `sbatch` and automatically start an interactive shell.
+    /// The command argument becomes optional and defaults to the user's shell.
+    #[arg(short = 'i', long)]
+    pub interactive: bool,
+    /// Shell to use for interactive sessions
+    ///
+    /// Only used when --interactive is specified. Defaults to the user's login shell.
+    #[arg(long, default_value = "auto")]
+    pub shell: String,
+}
+
+/// Try to get shell path using 'which' command
+fn get_shell_path_via_which(shell: &str) -> Option<String> {
+    std::process::Command::new("which")
+        .arg(shell)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+}
+
+/// Try to detect shell using parent process information
+fn get_shell_from_parent_process() -> Option<String> {
+    let system =
+        System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+
+    let my_pid = sysinfo::get_current_pid().ok()?;
+    let current_process = system.process(my_pid)?;
+    let parent_pid = current_process.parent()?;
+    let parent_process = system.process(parent_pid)?;
+    let parent_name = parent_process.name();
+
+    // Check if it's a known shell and try to get its full path
+    let shell_names = ["zsh", "bash", "fish", "tcsh", "csh", "sh"];
+    for shell in &shell_names {
+        if parent_name.eq_ignore_ascii_case(shell)
+            || parent_name.starts_with(shell)
+            || parent_name.contains(shell)
+        {
+            // Try to get the full path first
+            if let Some(full_path) = get_shell_path_via_which(shell) {
+                return Some(full_path);
+            }
+
+            // Fallback to shell name if we can't get full path
+            return Some(shell.to_string());
+        }
+    }
+
+    None
+}
+
+/// Try to get shell from SHELL environment variable
+fn get_shell_from_env() -> Option<String> {
+    std::env::var("SHELL")
+        .ok()
+        .filter(|shell_path| !shell_path.is_empty())
+}
+
+/// Try to find common shells using 'which'
+fn find_available_shell() -> Option<String> {
+    let common_shells = ["zsh", "bash", "sh"];
+    for shell in &common_shells {
+        if let Some(full_path) = get_shell_path_via_which(shell) {
+            return Some(full_path);
+        }
+    }
+    None
+}
+
+/// Get the user's current shell using parent process detection
+/// Returns the full path when possible, otherwise falls back to shell name
+fn get_user_shell() -> String {
+    // Method 1: Try to detect shell from parent process (most direct)
+    if let Some(shell) = get_shell_from_parent_process() {
+        return shell;
+    }
+
+    // Method 2: Try SHELL environment variable as fallback (reliable for full path)
+    if let Some(shell) = get_shell_from_env() {
+        return shell;
+    }
+
+    // Method 3: Try to detect common shells with full paths
+    if let Some(shell) = find_available_shell() {
+        return shell;
+    }
+
+    // Final fallback: try to get bash path, or just return "bash"
+    get_shell_path_via_which("bash").unwrap_or_else(|| "bash".to_string())
+}
+
+impl Cli {
+    /// Validate the arguments and return the command to execute
+    pub fn validate_and_get_command(&self) -> Result<String, String> {
+        if self.interactive {
+            // For interactive jobs, command is optional and defaults to shell
+            Ok(self.command.clone().unwrap_or_else(|| {
+                let shell = if self.shell == "auto" {
+                    get_user_shell()
+                } else {
+                    self.shell.clone()
+                };
+                format!("srun --pty {shell} -l")
+            }))
+        } else {
+            // For batch jobs, command is required
+            self.command.clone().ok_or_else(|| {
+                "Command is required for batch jobs. Use --interactive for interactive sessions.".to_string()
+            })
+        }
+    }
 }
 
 /// Parse a time string into a slurm time format
@@ -131,7 +259,7 @@ fn parse_memory(s: &str) -> Result<String, String> {
     }
 
     let s = if s.chars().all(|c| !c.is_ascii_alphabetic()) {
-        format!("{}M", s)
+        format!("{s}M")
     } else {
         s.to_string()
     };
@@ -148,7 +276,7 @@ fn parse_memory(s: &str) -> Result<String, String> {
     };
     // round up value to the nearest integer
     let value = value.ceil() as u64;
-    Ok(format!("{}{}", value, unit))
+    Ok(format!("{value}{unit}"))
 }
 
 #[cfg(test)]
@@ -530,5 +658,118 @@ mod tests {
         let actual = args.set;
         let expected = set;
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_get_user_shell_returns_path() {
+        // This test verifies that the function returns a valid shell (path or name)
+        let shell = get_user_shell();
+
+        // Should return either a full path or a known shell name
+        let valid_shells = ["zsh", "bash", "fish", "tcsh", "csh", "sh"];
+        let is_valid = shell.starts_with('/') || valid_shells.contains(&shell.as_str());
+
+        assert!(
+            is_valid,
+            "Expected a valid shell path or name, got: {shell}"
+        );
+    }
+
+    #[test]
+    fn test_get_user_shell_not_empty() {
+        let shell = get_user_shell();
+        assert!(!shell.is_empty(), "Shell name should not be empty");
+    }
+
+    #[test]
+    fn test_validate_and_get_command_interactive_no_command() {
+        let cli = Cli {
+            name: "test".to_string(),
+            command: None,
+            remainder: vec![],
+            output: "%x.out".to_string(),
+            error: "%x.err".to_string(),
+            memory: "1G".to_string(),
+            time: "1d".to_string(),
+            shebang: "#!/usr/bin/env bash".to_string(),
+            set: "euxo pipefail".to_string(),
+            dry_run: false,
+            test_only: false,
+            interactive: true,
+            shell: "zsh".to_string(),
+        };
+
+        let result = cli.validate_and_get_command().unwrap();
+        assert_eq!(result, "srun --pty zsh -l");
+    }
+
+    #[test]
+    fn test_validate_and_get_command_interactive_with_command() {
+        let cli = Cli {
+            name: "test".to_string(),
+            command: Some("custom command".to_string()),
+            remainder: vec![],
+            output: "%x.out".to_string(),
+            error: "%x.err".to_string(),
+            memory: "1G".to_string(),
+            time: "1d".to_string(),
+            shebang: "#!/usr/bin/env bash".to_string(),
+            set: "euxo pipefail".to_string(),
+            dry_run: false,
+            test_only: false,
+            interactive: true,
+            shell: "bash".to_string(),
+        };
+
+        let result = cli.validate_and_get_command().unwrap();
+        assert_eq!(result, "custom command");
+    }
+
+    #[test]
+    fn test_validate_and_get_command_batch_no_command() {
+        let cli = Cli {
+            name: "test".to_string(),
+            command: None,
+            remainder: vec![],
+            output: "%x.out".to_string(),
+            error: "%x.err".to_string(),
+            memory: "1G".to_string(),
+            time: "1d".to_string(),
+            shebang: "#!/usr/bin/env bash".to_string(),
+            set: "euxo pipefail".to_string(),
+            dry_run: false,
+            test_only: false,
+            interactive: false,
+            shell: "bash".to_string(),
+        };
+
+        let result = cli.validate_and_get_command();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Command is required for batch jobs. Use --interactive for interactive sessions."
+        );
+    }
+
+    #[test]
+    fn test_validate_and_get_command_batch_with_command() {
+        let cli = Cli {
+            name: "test".to_string(),
+            command: Some("batch command".to_string()),
+            remainder: vec![],
+            output: "%x.out".to_string(),
+            error: "%x.err".to_string(),
+            memory: "1G".to_string(),
+            time: "1d".to_string(),
+            shebang: "#!/usr/bin/env bash".to_string(),
+            set: "euxo pipefail".to_string(),
+            dry_run: false,
+            test_only: false,
+            interactive: false,
+            shell: "bash".to_string(),
+        };
+
+        let result = cli.validate_and_get_command().unwrap();
+        assert_eq!(result, "batch command");
     }
 }
