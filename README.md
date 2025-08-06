@@ -100,16 +100,28 @@ Submit a job that needs 8 CPUs
 $ ssubmit -m 16g -t 1d align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
 ```
 
+Start an interactive session with 5GB memory for 8 hours
+
+```shell
+$ ssubmit --interactive -m 5G -t 8h interactiveJob
+```
+
+Start an interactive session with custom shell and additional SLURM options
+
+```shell
+$ ssubmit --interactive -m 16G -t 4h DevSession --shell bash -- --partition=general --qos=normal
+```
+
 ```
 $ ssubmit -h
 Submit sbatch jobs without having to create a submission script
 
-Usage: ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
+Usage: ssubmit [OPTIONS] <NAME> [COMMAND] [-- <REMAINDER>...]
 
 Arguments:
-  <NAME>          Name of the job
-  <COMMAND>       Command to be executed by the job
-  [REMAINDER]...  Options to be passed on to sbatch
+  <NAME>            Name of the job
+  [COMMAND]         Command to be executed by the job. For batch jobs, this is required. For interactive jobs (--interactive), this is optional and defaults to starting a shell session
+  [REMAINDER]...    Options to be passed on to sbatch or salloc (for interactive jobs)
 
 Options:
   -o, --output <OUTPUT>    File to write job stdout to. (See `man sbatch | grep -A 3 'output='`) [default: %x.out]
@@ -120,6 +132,8 @@ Options:
   -s, --set <SET>          Options for the set command in the shell script [env: SSUBMIT_SET=] [default: "euxo pipefail"]
   -n, --dry-run            Print the sbatch command and submission script that would be executed, but do not execute them
   -T, --test-only          Return an estimate of when the job would be scheduled to run given the current queue. No job is actually submitted. [sbatch --test-only]
+  -i, --interactive        Request an interactive job session instead of a batch job
+      --shell <SHELL>      Shell to use for interactive sessions [default: auto-detected]
   -h, --help               Print help (see more with '--help')
   -V, --version            Print version
 ```
@@ -127,16 +141,38 @@ Options:
 The basic anatomy of a `ssubmit` call is
 
 ```
-ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
+ssubmit [OPTIONS] <NAME> [COMMAND] [-- <REMAINDER>...]
 ```
 
-`NAME` is the name of the job (the `--job-name` parameter in `sbatch`).
+`NAME` is the name of the job (the `--job-name` parameter in `sbatch` or `salloc`).
 
-`COMMAND` is what you want to be executed by the job. It **must** be quoted (single or
-double).
+`COMMAND` is what you want to be executed by the job. For batch jobs, it **must** be quoted (single or
+double) and is required. For interactive jobs (`--interactive`), this is optional and defaults to starting an interactive shell session.
 
-`REMAINDER` is any (optional) [`sbatch`-specific options](https://slurm.schedmd.com/sbatch.html#lbAG) you want to pass on. These
-must follow a `--` after `COMMAND`.
+`REMAINDER` is any (optional) [`sbatch`-specific options](https://slurm.schedmd.com/sbatch.html#lbAG) (for batch jobs) or [`salloc`-specific options](https://slurm.schedmd.com/salloc.html) (for interactive jobs) you want to pass on. These
+must follow a `--` after `COMMAND` (or after `NAME` if no command is provided for interactive jobs).
+
+### Interactive Jobs
+
+You can start interactive job sessions using the `--interactive` (or `-i`) flag. This uses `salloc` instead of `sbatch` and automatically starts an interactive shell session.
+
+```shell
+# Start an interactive session with default shell
+$ ssubmit --interactive -m 8G -t 4h my_session
+
+# Start an interactive session with a specific shell
+$ ssubmit --interactive --shell bash -m 16G -t 8h dev_work
+
+# Start an interactive session with additional SLURM options
+$ ssubmit --interactive -m 32G -t 12h gpu_session -- --partition=gpu --gres=gpu:1
+```
+
+When using `--interactive`:
+- The command argument is optional and defaults to starting an interactive shell
+- If no command is provided, `ssubmit` will automatically detect your current shell and start an interactive session
+- You can specify a different shell using the `--shell` option
+- All the same memory and time parsing features work just like with batch jobs
+- Additional SLURM options can be passed after `--` just like with batch jobs
 
 ### Memory
 
@@ -165,8 +201,9 @@ The environment variable `SSUBMIT_TIME` can be set to a default time limit. This
 ### Dry run
 
 You can see what `ssubmit` would do without actually submitting a job using dry run
-(`-n,--dry-run`). This will print the `sbatch` command and also the submission script
-that would have been provided.
+(`-n,--dry-run`). This will print the `sbatch` command (for batch jobs) or `salloc` command (for interactive jobs) that would have been executed.
+
+For batch jobs, it also shows the submission script:
 
 ```shell
 $ ssubmit -n -m 4g -t 1d dry "rsync -az src/ dest/" -- -c 8
@@ -183,6 +220,14 @@ set -euxo pipefail
 
 rsync -az src/ dest/
 =====<script>=====
+```
+
+For interactive jobs, it shows the `salloc` command:
+
+```shell
+$ ssubmit --interactive -n -m 8G -t 4h my_session
+[2022-01-19T08:58:58Z INFO  ssubmit] Dry run requested. Nothing submitted
+salloc --job-name my_session --mem 8000M --time 4:0:0 srun --pty zsh -l
 ```
 
 ### Script settings
@@ -208,7 +253,7 @@ You don't have to use patterns of course.
 
 ```
 $ ssubmit --help
-ssubmit 0.2.0
+ssubmit 1.0.0
 Michael Hall <michael@mbh.sh>
 Submit sbatch jobs without having to create a submission script
 
@@ -224,22 +269,16 @@ Submit a command that involves piping the output into another command. sbatch op
 are passed after a `--`.
 
 $ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
-Submit sbatch jobs without having to create a submission script
 
------------
-# EXAMPLES
------------
+Start an interactive session with 5GB memory for 8 hours.
 
-Submit a simple rsync command with a 600MB memory limit.
+$ ssubmit --interactive -m 5G -t 8h interactiveJob
 
-$ ssubmit -m 600m rsync_my_data "rsync -az src/ dest/"
+Start an interactive session with custom shell and additional SLURM options.
 
-Submit a command that involves piping the output into another command. sbatch options
-are passed after a `--`.
+$ ssubmit --interactive -m 16G -t 4h DevSession --shell bash -- --partition=general --qos=normal
 
-$ ssubmit -m 4G align "minimap2 -t 8 ref.fa reads.fq | samtools sort -o sorted.bam" -- -c 8
-
-Usage: ssubmit [OPTIONS] <NAME> <COMMAND> [-- <REMAINDER>...]
+Usage: ssubmit [OPTIONS] <NAME> [COMMAND] [-- <REMAINDER>...]
 
 Arguments:
   <NAME>
@@ -247,11 +286,14 @@ Arguments:
 
           See `man sbatch | grep -A 2 'job-name='` for more details.
 
-  <COMMAND>
+  [COMMAND]
           Command to be executed by the job
 
+          For batch jobs, this is required. For interactive jobs (--interactive), 
+          this is optional and defaults to starting a shell session.
+
   [REMAINDER]...
-          Options to be passed on to sbatch
+          Options to be passed on to sbatch or salloc (for interactive jobs)
 
 Options:
   -o, --output <OUTPUT>
@@ -303,6 +345,19 @@ Options:
 
   -T, --test-only
           Return an estimate of when the job would be scheduled to run given the current queue. No job is actually submitted. [sbatch --test-only]
+
+  -i, --interactive
+          Request an interactive job session instead of a batch job
+
+          This will use `salloc` instead of `sbatch` and automatically start an interactive shell.
+          The command argument becomes optional and defaults to the user's shell.
+
+      --shell <SHELL>
+          Shell to use for interactive sessions
+
+          Only used when --interactive is specified. Defaults to the user's login shell.
+
+          [default: auto-detected]
 
   -h, --help
           Print help (see a summary with '-h')

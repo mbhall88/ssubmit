@@ -24,6 +24,7 @@ log = "0.4.22"
 env_logger = "0.11.5"
 duration-str = "0.11.2"
 byte-unit = "5.1.4"
+sysinfo = "0.30"
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
