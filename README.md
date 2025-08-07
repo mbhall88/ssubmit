@@ -94,16 +94,10 @@ Submit an rsync job named "foo" and request 350MB of memory and a one week time 
 $ ssubmit -m 350m -t 1w foo "rsync -az src/ dest/"
 ```
 
-Submit a job that needs 8 CPUs and no environment variable export
+Submit a job that needs 8 CPUs
 
 ```shell
-$ ssubmit -m 16g -t 1d --export NONE align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
-```
-
-Submit a job with specific environment variables exported
-
-```shell
-$ ssubmit --export "PATH,HOME,USER" -m 2g -t 4h analysis "python analysis.py"
+$ ssubmit -m 16g -t 1d align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
 ```
 
 Start an interactive session with 5GB memory for 8 hours
