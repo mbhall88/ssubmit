@@ -107,6 +107,12 @@ pub struct Cli {
     /// Only used when --interactive is specified. Defaults to the user's login shell.
     #[arg(long, default_value = "auto")]
     pub shell: String,
+    /// Control which environment variables are exported to the job
+    ///
+    /// Passed directly to sbatch as --export=<value>. Use 'NONE' to export no variables,
+    /// 'ALL' to export all variables, or specify specific variables like 'PATH,HOME'.
+    #[arg(long, default_value = "ALL")]
+    pub export: String,
 }
 
 /// Try to get shell path using 'which' command
@@ -700,6 +706,7 @@ mod tests {
             test_only: false,
             interactive: true,
             shell: "zsh".to_string(),
+            export: "ALL".to_string(),
         };
 
         let result = cli.validate_and_get_command().unwrap();
@@ -722,6 +729,7 @@ mod tests {
             test_only: false,
             interactive: true,
             shell: "bash".to_string(),
+            export: "ALL".to_string(),
         };
 
         let result = cli.validate_and_get_command().unwrap();
@@ -744,6 +752,7 @@ mod tests {
             test_only: false,
             interactive: false,
             shell: "bash".to_string(),
+            export: "ALL".to_string(),
         };
 
         let result = cli.validate_and_get_command();
@@ -770,9 +779,34 @@ mod tests {
             test_only: false,
             interactive: false,
             shell: "bash".to_string(),
+            export: "ALL".to_string(),
         };
 
         let result = cli.validate_and_get_command().unwrap();
         assert_eq!(result, "batch command");
+    }
+
+    #[test]
+    fn test_export_default_value() {
+        let args = Cli::parse_from(["ssubmit", "test_job", "echo hello"]);
+        assert_eq!(args.export, "ALL");
+    }
+
+    #[test]
+    fn test_export_custom_value() {
+        let args = Cli::parse_from(["ssubmit", "--export", "NONE", "test_job", "echo hello"]);
+        assert_eq!(args.export, "NONE");
+    }
+
+    #[test]
+    fn test_export_specific_variables() {
+        let args = Cli::parse_from([
+            "ssubmit",
+            "--export",
+            "PATH,HOME,USER",
+            "test_job",
+            "echo hello",
+        ]);
+        assert_eq!(args.export, "PATH,HOME,USER");
     }
 }

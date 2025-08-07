@@ -45,6 +45,12 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
 
     let mut sbatch_opts = args.remainder.clone();
 
+    // Add --export option unless user already specified it in remainder args
+    let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
+    if !has_export {
+        sbatch_opts.push(format!("--export={}", args.export));
+    }
+
     let test_only = if args.test_only {
         sbatch_opts.push("--test-only".to_string());
         true
@@ -183,4 +189,99 @@ fn handle_interactive_job(args: &Cli, command: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper function to create a test CLI struct
+    fn create_test_cli(export: &str, remainder: Vec<String>) -> Cli {
+        Cli {
+            name: "test_job".to_string(),
+            command: Some("echo hello".to_string()),
+            remainder,
+            output: "%x.out".to_string(),
+            error: "%x.err".to_string(),
+            memory: "1G".to_string(),
+            time: "1d".to_string(),
+            shebang: "#!/usr/bin/env bash".to_string(),
+            set: "euxo pipefail".to_string(),
+            dry_run: true, // Use dry_run to avoid actually running sbatch
+            test_only: false,
+            interactive: false,
+            shell: "bash".to_string(),
+            export: export.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_export_default_all() {
+        let cli = create_test_cli("ALL", vec![]);
+        let _command = cli.validate_and_get_command().unwrap();
+
+        // Test that handle_batch_job would add --export=ALL
+        let _script = ssubmit::make_submission_script(
+            &cli.shebang,
+            &cli.set,
+            &cli.name,
+            &cli.memory,
+            &cli.time,
+            &cli.error,
+            &cli.output,
+            &_command,
+        );
+
+        let mut sbatch_opts = cli.remainder.clone();
+        let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
+        if !has_export {
+            sbatch_opts.push(format!("--export={}", cli.export));
+        }
+
+        assert!(sbatch_opts.contains(&"--export=ALL".to_string()));
+    }
+
+    #[test]
+    fn test_export_none() {
+        let cli = create_test_cli("NONE", vec![]);
+        let _command = cli.validate_and_get_command().unwrap();
+
+        let mut sbatch_opts = cli.remainder.clone();
+        let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
+        if !has_export {
+            sbatch_opts.push(format!("--export={}", cli.export));
+        }
+
+        assert!(sbatch_opts.contains(&"--export=NONE".to_string()));
+    }
+
+    #[test]
+    fn test_export_specific_variables() {
+        let cli = create_test_cli("PATH,HOME,USER", vec![]);
+        let _command = cli.validate_and_get_command().unwrap();
+
+        let mut sbatch_opts = cli.remainder.clone();
+        let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
+        if !has_export {
+            sbatch_opts.push(format!("--export={}", cli.export));
+        }
+
+        assert!(sbatch_opts.contains(&"--export=PATH,HOME,USER".to_string()));
+    }
+
+    #[test]
+    fn test_export_user_override_via_remainder() {
+        let cli = create_test_cli("ALL", vec!["--export=NONE".to_string()]);
+
+        let mut sbatch_opts = cli.remainder.clone();
+        let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
+        if !has_export {
+            sbatch_opts.push(format!("--export={}", cli.export));
+        }
+
+        // Should not add the default --export=ALL since user specified --export=NONE
+        assert!(sbatch_opts.contains(&"--export=NONE".to_string()));
+        assert!(!sbatch_opts.contains(&"--export=ALL".to_string()));
+        assert_eq!(sbatch_opts.len(), 1); // Only the user-specified export
+    }
 }

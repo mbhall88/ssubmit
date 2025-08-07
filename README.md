@@ -94,10 +94,16 @@ Submit an rsync job named "foo" and request 350MB of memory and a one week time 
 $ ssubmit -m 350m -t 1w foo "rsync -az src/ dest/"
 ```
 
-Submit a job that needs 8 CPUs
+Submit a job that needs 8 CPUs and no environment variable export
 
 ```shell
-$ ssubmit -m 16g -t 1d align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
+$ ssubmit -m 16g -t 1d --export NONE align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
+```
+
+Submit a job with specific environment variables exported
+
+```shell
+$ ssubmit --export "PATH,HOME,USER" -m 2g -t 4h analysis "python analysis.py"
 ```
 
 Start an interactive session with 5GB memory for 8 hours
@@ -134,6 +140,7 @@ Options:
   -T, --test-only          Return an estimate of when the job would be scheduled to run given the current queue. No job is actually submitted. [sbatch --test-only]
   -i, --interactive        Request an interactive job session instead of a batch job
       --shell <SHELL>      Shell to use for interactive sessions [default: auto-detected]
+      --export <EXPORT>    Control which environment variables are exported to the job [default: ALL]
   -h, --help               Print help (see more with '--help')
   -V, --version            Print version
 ```
@@ -198,6 +205,30 @@ slurm as minutes. However, not providing a unit in the example of `5m3` will be 
 
 The environment variable `SSUBMIT_TIME` can be set to a default time limit. This can be overridden by passing `-t`.
 
+### Environment Variables Export
+
+By default, `ssubmit` exports all environment variables to the job using `--export=ALL`. This ensures that your job has access to the same environment as your current shell session.
+
+You can control which environment variables are exported using the `--export` option:
+
+```shell
+# Export all environment variables (default behavior)
+$ ssubmit -m 2g analysis "python script.py"
+
+# Export no environment variables
+$ ssubmit --export NONE -m 2g analysis "python script.py"
+
+# Export specific environment variables only
+$ ssubmit --export "PATH,HOME,USER,PYTHONPATH" -m 2g analysis "python script.py"
+```
+
+This option is passed directly to `sbatch` as `--export=<value>`, so it supports all the same values as the sbatch `--export` option. Common values include:
+- `ALL` - Export all environment variables (default)
+- `NONE` - Export no environment variables
+- Comma-separated list (e.g., `PATH,HOME`) - Export only the specified variables
+
+Note that if you specify `--export` in the remainder arguments (after `--`), it will override the default `--export=ALL` behavior.
+
 ### Dry run
 
 You can see what `ssubmit` would do without actually submitting a job using dry run
@@ -208,7 +239,7 @@ For batch jobs, it also shows the submission script:
 ```shell
 $ ssubmit -n -m 4g -t 1d dry "rsync -az src/ dest/" -- -c 8
 [2022-01-19T08:58:58Z INFO  ssubmit] Dry run requested. Nothing submitted
-sbatch -c 8 <script>
+sbatch --export=ALL -c 8 <script>
 =====<script>=====
 #!/usr/bin/env bash
 #SBATCH --job-name=dry
@@ -277,6 +308,10 @@ $ ssubmit --interactive -m 5G -t 8h interactiveJob
 Start an interactive session with custom shell and additional SLURM options.
 
 $ ssubmit --interactive -m 16G -t 4h DevSession --shell bash -- --partition=general --qos=normal
+
+Submit a job with no environment variable export.
+
+$ ssubmit --export NONE -m 2G analysis "python script.py"
 
 Usage: ssubmit [OPTIONS] <NAME> [COMMAND] [-- <REMAINDER>...]
 
@@ -358,6 +393,13 @@ Options:
           Only used when --interactive is specified. Defaults to the user's login shell.
 
           [default: auto-detected]
+
+      --export <EXPORT>
+          Control which environment variables are exported to the job
+
+          Passed directly to sbatch as --export=<value>. Use 'NONE' to export no variables, 'ALL' to export all variables, or specify specific variables like 'PATH,HOME'.
+
+          [default: ALL]
 
   -h, --help
           Print help (see a summary with '-h')
