@@ -136,6 +136,7 @@ pub fn make_submission_plan(
     test_only: bool,
 ) -> SubmissionPlan {
     let script = make_submission_script(shebang, set, name, memory, time, error, output, command);
+    let effective_export = effective_export(remainder, export);
 
     let mut arguments = remainder.to_vec();
     if !arguments.iter().any(|arg| arg.starts_with("--export")) {
@@ -154,7 +155,7 @@ pub fn make_submission_plan(
             time: time.to_string(),
             output: output.to_string(),
             error: error.to_string(),
-            export: export.to_string(),
+            export: effective_export,
         },
         slurm: SlurmPlan {
             executable: "sbatch".to_string(),
@@ -162,6 +163,25 @@ pub fn make_submission_plan(
             script,
         },
     }
+}
+
+fn effective_export(remainder: &[String], default: &str) -> String {
+    let mut export = default.to_string();
+    let mut index = 0;
+
+    while index < remainder.len() {
+        if let Some(value) = remainder[index].strip_prefix("--export=") {
+            export = value.to_string();
+        } else if remainder[index] == "--export" {
+            if let Some(value) = remainder.get(index + 1) {
+                export = value.to_string();
+                index += 1;
+            }
+        }
+        index += 1;
+    }
+
+    export
 }
 
 pub trait SlurmTime {
