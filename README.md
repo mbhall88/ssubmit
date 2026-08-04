@@ -22,15 +22,15 @@ jobs and I don't want to fluff around with making a submission script.
 **tl;dr**
 
 ```shell
-curl -sSL install.ssubmit.mbh.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh
 # or with wget
-wget -nv -O - install.ssubmit.mbh.sh | sh
+wget -qO- https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh
 ```
 
 You can pass options to the script like so
 
 ```
-$ curl -sSL install.ssubmit.mbh.sh | sh -s -- --help
+$ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh -s -- --help
 install.sh [option]
 
 Fetch and install the latest version of ssubmit, if ssubmit is already
