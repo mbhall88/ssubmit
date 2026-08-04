@@ -1,5 +1,7 @@
 use std::cmp::max;
 use std::fmt::Write as _;
+use std::io::Write as _;
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration; // import without risk of name clashing
 
 use log::warn;
@@ -32,9 +34,72 @@ pub struct SubmissionPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SubmissionResult {
+    pub job_id: String,
+    pub cluster: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubmissionError {
+    pub kind: String,
+    pub message: String,
+    pub exit_code: Option<i32>,
+    pub stderr: Option<String>,
+}
+
+impl SubmissionError {
+    pub fn validation(message: impl Into<String>) -> Self {
+        Self {
+            kind: "validation".to_string(),
+            message: message.into(),
+            exit_code: None,
+            stderr: None,
+        }
+    }
+
+    pub fn process(message: impl Into<String>, stderr: Option<String>) -> Self {
+        Self {
+            kind: "process".to_string(),
+            message: message.into(),
+            exit_code: None,
+            stderr,
+        }
+    }
+
+    pub fn slurm(exit_code: i32, stderr: Option<String>) -> Self {
+        Self {
+            kind: "slurm".to_string(),
+            message: format!("Failed to submit job with exit code {exit_code}"),
+            exit_code: Some(exit_code),
+            stderr,
+        }
+    }
+
+    pub fn output(message: impl Into<String>, stderr: Option<String>) -> Self {
+        Self {
+            kind: "output".to_string(),
+            message: message.into(),
+            exit_code: None,
+            stderr,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SbatchOutput {
+    pub status: ExitStatus,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct JsonError {
     pub kind: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -44,6 +109,8 @@ pub struct JsonResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<SubmissionPlan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submission: Option<SubmissionResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<JsonError>,
 }
@@ -55,6 +122,18 @@ impl JsonResponse {
             operation: "plan".to_string(),
             ok: true,
             plan: Some(plan),
+            submission: None,
+            error: None,
+        }
+    }
+
+    pub fn submission(plan: SubmissionPlan, submission: SubmissionResult) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "submit".to_string(),
+            ok: true,
+            plan: Some(plan),
+            submission: Some(submission),
             error: None,
         }
     }
@@ -65,9 +144,28 @@ impl JsonResponse {
             operation: "plan".to_string(),
             ok: false,
             plan: None,
+            submission: None,
             error: Some(JsonError {
                 kind: kind.into(),
                 message: message.into(),
+                exit_code: None,
+                stderr: None,
+            }),
+        }
+    }
+
+    pub fn submission_error(plan: SubmissionPlan, error: SubmissionError) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "submit".to_string(),
+            ok: false,
+            plan: Some(plan),
+            submission: None,
+            error: Some(JsonError {
+                kind: error.kind,
+                message: error.message,
+                exit_code: error.exit_code,
+                stderr: error.stderr,
             }),
         }
     }
@@ -163,6 +261,144 @@ pub fn make_submission_plan(
             script,
         },
     }
+}
+
+pub fn prepare_machine_submission(
+    plan: &SubmissionPlan,
+) -> Result<SubmissionPlan, SubmissionError> {
+    let mut arguments = Vec::with_capacity(plan.slurm.arguments.len() + 1);
+    let mut parsable_seen = false;
+
+    for argument in &plan.slurm.arguments {
+        if is_quiet_argument(argument) {
+            return Err(SubmissionError::validation(
+                "JSON submission cannot use --quiet because it suppresses the job identifier",
+            ));
+        }
+
+        if is_parsable_argument(argument) {
+            if parsable_seen {
+                continue;
+            }
+            parsable_seen = true;
+        }
+
+        arguments.push(argument.clone());
+    }
+
+    if !parsable_seen {
+        arguments.push("--parsable".to_string());
+    }
+
+    let mut machine_plan = plan.clone();
+    machine_plan.slurm.arguments = arguments;
+    Ok(machine_plan)
+}
+
+fn is_quiet_argument(argument: &str) -> bool {
+    argument == "-Q" || argument == "--quiet" || argument.starts_with("--quiet=")
+}
+
+fn is_parsable_argument(argument: &str) -> bool {
+    argument == "--parsable" || argument == "--parsable2"
+}
+
+pub fn run_sbatch(plan: &SubmissionPlan) -> Result<SbatchOutput, SubmissionError> {
+    let mut child = Command::new(&plan.slurm.executable)
+        .args(&plan.slurm.arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| {
+            SubmissionError::process(format!("Failed to spawn sbatch process: {error}"), None)
+        })?;
+
+    {
+        let stdin = child.stdin.as_mut().ok_or_else(|| {
+            SubmissionError::process("Failed to connect to sbatch process stdin", None)
+        })?;
+        stdin
+            .write_all(plan.slurm.script.as_bytes())
+            .map_err(|error| {
+                SubmissionError::process(
+                    format!("Failed to write to sbatch process stdin: {error}"),
+                    None,
+                )
+            })?;
+    }
+
+    let output = child.wait_with_output().map_err(|error| {
+        SubmissionError::process(format!("Failed to execute sbatch process: {error}"), None)
+    })?;
+
+    Ok(SbatchOutput {
+        status: output.status,
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+pub fn submit_sbatch(plan: &SubmissionPlan) -> Result<SubmissionResult, SubmissionError> {
+    let output = run_sbatch(plan)?;
+    if let Some(error) = classify_sbatch_failure(&output) {
+        return Err(error);
+    }
+
+    parse_submission_output(&output.stdout, non_empty_trimmed(&output.stderr))
+}
+
+pub fn classify_sbatch_failure(output: &SbatchOutput) -> Option<SubmissionError> {
+    let stderr = non_empty_trimmed(&output.stderr);
+    match output.status.code() {
+        Some(0) => None,
+        Some(exit_code) => Some(SubmissionError::slurm(exit_code, stderr)),
+        None => Some(SubmissionError::process(
+            "sbatch process terminated by signal",
+            stderr,
+        )),
+    }
+}
+
+pub fn parse_submission_output(
+    stdout: &str,
+    stderr: Option<String>,
+) -> Result<SubmissionResult, SubmissionError> {
+    let output = stdout.trim();
+    if output.is_empty() {
+        return Err(SubmissionError::output(
+            "sbatch returned empty output",
+            stderr,
+        ));
+    }
+
+    if output.chars().any(char::is_whitespace) {
+        return Err(SubmissionError::output(
+            "sbatch returned malformed parsable output",
+            stderr,
+        ));
+    }
+
+    let mut fields = output.split(';');
+    let job_id = fields.next().unwrap_or_default();
+    let cluster = fields.next();
+
+    if job_id.is_empty() || cluster == Some("") || fields.next().is_some() {
+        return Err(SubmissionError::output(
+            "sbatch returned malformed parsable output",
+            stderr,
+        ));
+    }
+
+    Ok(SubmissionResult {
+        job_id: job_id.to_string(),
+        cluster: cluster.map(str::to_string),
+    })
+}
+
+fn non_empty_trimmed(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn effective_export(remainder: &[String], default: &str) -> String {
