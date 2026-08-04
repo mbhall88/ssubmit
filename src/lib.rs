@@ -39,6 +39,12 @@ pub struct SubmissionResult {
     pub cluster: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SchedulerTestResult {
+    pub stdout: String,
+    pub stderr: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubmissionError {
     pub kind: String,
@@ -112,6 +118,8 @@ pub struct JsonResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub submission: Option<SubmissionResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub test: Option<SchedulerTestResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<JsonError>,
 }
 
@@ -123,6 +131,7 @@ impl JsonResponse {
             ok: true,
             plan: Some(plan),
             submission: None,
+            test: None,
             error: None,
         }
     }
@@ -134,6 +143,19 @@ impl JsonResponse {
             ok: true,
             plan: Some(plan),
             submission: Some(submission),
+            test: None,
+            error: None,
+        }
+    }
+
+    pub fn scheduler_test(plan: SubmissionPlan, test: SchedulerTestResult) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "test".to_string(),
+            ok: true,
+            plan: Some(plan),
+            submission: None,
+            test: Some(test),
             error: None,
         }
     }
@@ -145,6 +167,7 @@ impl JsonResponse {
             ok: false,
             plan: None,
             submission: None,
+            test: None,
             error: Some(JsonError {
                 kind: kind.into(),
                 message: message.into(),
@@ -161,6 +184,24 @@ impl JsonResponse {
             ok: false,
             plan: Some(plan),
             submission: None,
+            test: None,
+            error: Some(JsonError {
+                kind: error.kind,
+                message: error.message,
+                exit_code: error.exit_code,
+                stderr: error.stderr,
+            }),
+        }
+    }
+
+    pub fn scheduler_test_error(plan: SubmissionPlan, error: SubmissionError) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "test".to_string(),
+            ok: false,
+            plan: Some(plan),
+            submission: None,
+            test: None,
             error: Some(JsonError {
                 kind: error.kind,
                 message: error.message,
@@ -236,12 +277,23 @@ pub fn make_submission_plan(
     let script = make_submission_script(shebang, set, name, memory, time, error, output, command);
     let effective_export = effective_export(remainder, export);
 
-    let mut arguments = remainder.to_vec();
+    let mut arguments = Vec::with_capacity(remainder.len() + usize::from(test_only));
+    let mut test_only_seen = false;
+    for argument in remainder {
+        if is_test_only_argument(argument) {
+            if test_only_seen {
+                continue;
+            }
+            test_only_seen = true;
+        }
+        arguments.push(argument.clone());
+    }
+
     if !arguments.iter().any(|arg| arg.starts_with("--export")) {
         arguments.push(format!("--export={export}"));
     }
 
-    if test_only {
+    if test_only && !test_only_seen {
         arguments.push("--test-only".to_string());
     }
 
@@ -295,12 +347,31 @@ pub fn prepare_machine_submission(
     Ok(machine_plan)
 }
 
+pub fn prepare_machine_test(plan: &SubmissionPlan) -> Result<SubmissionPlan, SubmissionError> {
+    if plan
+        .slurm
+        .arguments
+        .iter()
+        .any(|argument| is_quiet_argument(argument))
+    {
+        return Err(SubmissionError::validation(
+            "JSON scheduler tests cannot use --quiet because it suppresses scheduler feedback",
+        ));
+    }
+
+    Ok(plan.clone())
+}
+
 fn is_quiet_argument(argument: &str) -> bool {
     argument == "-Q" || argument == "--quiet" || argument.starts_with("--quiet=")
 }
 
 fn is_parsable_argument(argument: &str) -> bool {
     argument == "--parsable" || argument == "--parsable2"
+}
+
+fn is_test_only_argument(argument: &str) -> bool {
+    argument == "--test-only"
 }
 
 pub fn run_sbatch(plan: &SubmissionPlan) -> Result<SbatchOutput, SubmissionError> {
@@ -348,6 +419,18 @@ pub fn submit_sbatch(plan: &SubmissionPlan) -> Result<SubmissionResult, Submissi
     parse_submission_output(&output.stdout, non_empty_trimmed(&output.stderr))
 }
 
+pub fn test_sbatch(plan: &SubmissionPlan) -> Result<SchedulerTestResult, SubmissionError> {
+    let output = run_sbatch(plan)?;
+    if let Some(error) = classify_scheduler_test_failure(&output) {
+        return Err(error);
+    }
+
+    Ok(SchedulerTestResult {
+        stdout: output.stdout.trim_end().to_string(),
+        stderr: output.stderr.trim_end().to_string(),
+    })
+}
+
 pub fn classify_sbatch_failure(output: &SbatchOutput) -> Option<SubmissionError> {
     let stderr = non_empty_trimmed(&output.stderr);
     match output.status.code() {
@@ -355,6 +438,23 @@ pub fn classify_sbatch_failure(output: &SbatchOutput) -> Option<SubmissionError>
         Some(exit_code) => Some(SubmissionError::slurm(exit_code, stderr)),
         None => Some(SubmissionError::process(
             "sbatch process terminated by signal",
+            stderr,
+        )),
+    }
+}
+
+pub fn classify_scheduler_test_failure(output: &SbatchOutput) -> Option<SubmissionError> {
+    let stderr = non_empty_trimmed(&output.stderr);
+    match output.status.code() {
+        Some(0) => None,
+        Some(exit_code) => Some(SubmissionError {
+            kind: "slurm".to_string(),
+            message: format!("Scheduler test failed with exit code {exit_code}"),
+            exit_code: Some(exit_code),
+            stderr,
+        }),
+        None => Some(SubmissionError::process(
+            "Scheduler test process terminated by signal",
             stderr,
         )),
     }

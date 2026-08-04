@@ -161,7 +161,11 @@ fn assert_matches_schema(response: &Value) {
 
     if ok {
         match operation {
-            "plan" | "test" => assert!(response["plan"].is_object()),
+            "plan" => assert!(response["plan"].is_object()),
+            "test" => {
+                assert!(response["plan"].is_object());
+                assert!(response["test"].is_object());
+            }
             "submit" => assert!(response["submission"].is_object()),
             _ => unreachable!("operation enum was checked above"),
         }
@@ -213,6 +217,15 @@ fn assert_matches_schema(response: &Value) {
                     || response["submission"]["cluster"].is_string(),
                 "submission.cluster must be null or a string"
             );
+        }
+        if response["test"].is_object() {
+            assert_required_fields(
+                &response["test"],
+                &schema["definitions"]["test"]["required"],
+                "test",
+            );
+            assert!(response["test"]["stdout"].is_string());
+            assert!(response["test"]["stderr"].is_string());
         }
     } else {
         assert_required_string_fields(&response["error"], &schema["definitions"]["error"], "error");
@@ -526,4 +539,154 @@ fn json_submission_rejects_quiet_passthrough_option() {
         .expect("quiet validation message")
         .contains("quiet"));
     assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_test_only_returns_scheduler_feedback_without_a_submission_result() {
+    let fake = FakeSbatch::new("", "sbatch: Job 1234 to start at 2026-08-04T12:00:00\n", 0);
+
+    let output = fake.run(&["--test-only", "--json", "example", "echo hello"]);
+
+    assert!(output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["schema_version"], json!(1));
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["ok"], json!(true));
+    assert!(response["submission"].is_null());
+    assert_eq!(response["test"]["stdout"], json!(""));
+    assert_eq!(
+        response["test"]["stderr"],
+        json!("sbatch: Job 1234 to start at 2026-08-04T12:00:00")
+    );
+    assert_eq!(
+        response["plan"]["slurm"]["arguments"],
+        json!(["--export=ALL", "--test-only"])
+    );
+    assert_eq!(fake.recorded_args(), "--export=ALL\n--test-only\n");
+    assert!(Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_test_only_deduplicates_first_class_and_passthrough_options() {
+    let fake = FakeSbatch::new("scheduler output\n", "", 0);
+
+    let output = fake.run(&[
+        "--test-only",
+        "--json",
+        "example",
+        "echo hello",
+        "--",
+        "--partition=short",
+        "--test-only",
+        "--qos=normal",
+        "--test-only",
+    ]);
+
+    assert!(output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["test"]["stdout"], json!("scheduler output"));
+    assert_eq!(
+        response["plan"]["slurm"]["arguments"],
+        json!([
+            "--partition=short",
+            "--test-only",
+            "--qos=normal",
+            "--export=ALL"
+        ])
+    );
+    assert_eq!(
+        fake.recorded_args(),
+        "--partition=short\n--test-only\n--qos=normal\n--export=ALL\n"
+    );
+}
+
+#[test]
+fn json_test_only_accepts_the_passthrough_flag_without_the_first_class_flag() {
+    let fake = FakeSbatch::new("scheduler output\n", "", 0);
+
+    let output = fake.run(&["--json", "example", "echo hello", "--", "--test-only"]);
+
+    assert!(output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["test"]["stdout"], json!("scheduler output"));
+    assert_eq!(fake.recorded_args(), "--test-only\n--export=ALL\n");
+}
+
+#[test]
+fn json_test_only_rejects_quiet_passthrough_option() {
+    let fake = FakeSbatch::new("unexpected", "unexpected", 0);
+
+    let output = fake.run(&[
+        "--test-only",
+        "--json",
+        "example",
+        "echo hello",
+        "--",
+        "--quiet",
+    ]);
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["error"]["kind"], json!("validation"));
+    assert!(response["error"]["message"]
+        .as_str()
+        .expect("quiet validation message")
+        .contains("quiet"));
+    assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_test_only_rejection_returns_structured_scheduler_error() {
+    let fake = FakeSbatch::new("", "sbatch: error: Invalid account\n", 1);
+
+    let output = fake.run(&["--test-only", "--json", "example", "echo hello"]);
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["ok"], json!(false));
+    assert_eq!(response["error"]["kind"], json!("slurm"));
+    assert_eq!(response["error"]["exit_code"], json!(1));
+    assert_eq!(
+        response["error"]["stderr"],
+        json!("sbatch: error: Invalid account")
+    );
+}
+
+#[test]
+fn json_test_only_reports_launch_failure_as_a_process_error() {
+    let fake = FakeSbatch::new("unused", "unused", 0);
+
+    let output = fake
+        .command()
+        .env("PATH", "/usr/bin:/bin")
+        .args(["--test-only", "--json", "example", "echo hello"])
+        .output()
+        .expect("run ssubmit without sbatch");
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("test"));
+    assert_eq!(response["error"]["kind"], json!("process"));
+    assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn text_test_only_preserves_scheduler_feedback_and_uses_one_flag() {
+    let fake = FakeSbatch::new("unused\n", "sbatch: Job 55 to start at later\n", 0);
+
+    let output = fake.run(&["--test-only", "example", "echo hello"]);
+
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Job 55 to start at later"));
+    assert_eq!(fake.recorded_args(), "--export=ALL\n--test-only\n");
 }
