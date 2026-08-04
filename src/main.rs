@@ -2,10 +2,12 @@ use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use env_logger::Builder;
 use log::{error, info, LevelFilter};
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use ssubmit::{make_submission_plan, JsonResponse};
+use ssubmit::{
+    classify_sbatch_failure, make_submission_plan, prepare_machine_submission, run_sbatch,
+    submit_sbatch, JsonResponse, SubmissionError,
+};
 
 use crate::cli::Cli;
 
@@ -52,6 +54,22 @@ fn emit_json_error(message: impl Into<String>) -> Result<()> {
     Err(anyhow!("{}", message))
 }
 
+fn emit_json_submission_error(plan: ssubmit::SubmissionPlan, error: SubmissionError) -> Result<()> {
+    let message = error.message.clone();
+    if let Some(stderr) = error.stderr.as_deref() {
+        eprintln!("{stderr}");
+    }
+    emit_json_response(JsonResponse::submission_error(plan, error))?;
+    Err(anyhow!("{}", message))
+}
+
+fn human_submission_error(error: &SubmissionError) -> String {
+    match &error.stderr {
+        Some(stderr) => format!("{}: {stderr}", error.message),
+        None => error.message.clone(),
+    }
+}
+
 fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
     let plan = make_submission_plan(
         &args.shebang,
@@ -68,10 +86,22 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
     );
 
     if args.json {
-        if !args.dry_run {
+        if args.dry_run {
+            return emit_json_response(JsonResponse::plan(plan));
+        }
+
+        if args.test_only {
             return emit_json_error("JSON mode currently requires --dry-run");
         }
-        return emit_json_response(JsonResponse::plan(plan));
+
+        let machine_plan = match prepare_machine_submission(&plan) {
+            Ok(plan) => plan,
+            Err(error) => return emit_json_submission_error(plan, error),
+        };
+        return match submit_sbatch(&machine_plan) {
+            Ok(result) => emit_json_response(JsonResponse::submission(machine_plan, result)),
+            Err(error) => emit_json_submission_error(machine_plan, error),
+        };
     }
 
     if args.dry_run {
@@ -88,57 +118,25 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
         );
     } else {
         let test_only = plan.slurm.arguments.iter().any(|arg| arg == "--test-only");
-        let mut sbatch_child = Command::new(&plan.slurm.executable)
-            .args(&plan.slurm.arguments)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn sbatch process")?;
+        let sbatch_output =
+            run_sbatch(&plan).map_err(|error| anyhow!(human_submission_error(&error)))?;
 
-        {
-            let stdin = sbatch_child
-                .stdin
-                .as_mut()
-                .context("Failed to connect to stdio of sbatch process")?;
-            stdin
-                .write_all(plan.slurm.script.as_bytes())
-                .context("Failed to write to sbatch process' stdin")?;
+        if let Some(failure) = classify_sbatch_failure(&sbatch_output) {
+            let message = human_submission_error(&failure);
+            error!("{message}");
+            return Err(anyhow!("{}", message));
         }
-        let sbatch_output = sbatch_child
-            .wait_with_output()
-            .context("Failed to execute sbatch")?;
 
-        match sbatch_output.status.code() {
-            Some(0) => {
-                if test_only {
-                    for line in String::from_utf8_lossy(&sbatch_output.stderr).lines() {
-                        // the relevant line will be something like sbatch: Job 123456 to start at ...
-                        if line.starts_with("sbatch: Job") {
-                            info!("{}", line);
-                            break;
-                        }
-                    }
-                } else {
-                    info!(
-                        "{}",
-                        String::from_utf8_lossy(&sbatch_output.stdout).trim_end()
-                    )
-                };
+        if test_only {
+            for line in sbatch_output.stderr.lines() {
+                // the relevant line will be something like sbatch: Job 123456 to start at ...
+                if line.starts_with("sbatch: Job") {
+                    info!("{}", line);
+                    break;
+                }
             }
-            Some(c) => {
-                let stderr = String::from_utf8_lossy(&sbatch_output.stderr)
-                    .trim_end()
-                    .to_string();
-                let message = if stderr.is_empty() {
-                    format!("Failed to submit job with exit code {c}")
-                } else {
-                    format!("Failed to submit job with exit code {c}: {stderr}")
-                };
-                error!("{message}");
-                return Err(anyhow!("{}", message));
-            }
-            None => return Err(anyhow!("Process terminated by signal")),
+        } else {
+            info!("{}", sbatch_output.stdout.trim_end())
         }
     }
 

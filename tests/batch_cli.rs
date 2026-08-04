@@ -19,6 +19,7 @@ struct FakeSbatch {
     stdout: String,
     stderr: String,
     exit_code: i32,
+    terminate_by_signal: bool,
 }
 
 impl FakeSbatch {
@@ -41,6 +42,9 @@ printf '%s\n' "$@" > "$SSUBMIT_FAKE_ARGS"
 cat > "$SSUBMIT_FAKE_SCRIPT"
 printf '%s' "$SSUBMIT_FAKE_STDOUT"
 printf '%s' "$SSUBMIT_FAKE_STDERR" >&2
+if [ "${SSUBMIT_FAKE_SIGNAL:-0}" = 1 ]; then
+    kill -TERM $$
+fi
 exit "$SSUBMIT_FAKE_EXIT"
 "#;
         fs::write(&sbatch_path, script).expect("write fake sbatch");
@@ -55,7 +59,14 @@ exit "$SSUBMIT_FAKE_EXIT"
             stdout: stdout.to_string(),
             stderr: stderr.to_string(),
             exit_code,
+            terminate_by_signal: false,
         }
+    }
+
+    fn terminating_by_signal(stdout: &str, stderr: &str) -> Self {
+        let mut fake = Self::new(stdout, stderr, 0);
+        fake.terminate_by_signal = true;
+        fake
     }
 
     fn command(&self) -> Command {
@@ -70,6 +81,9 @@ exit "$SSUBMIT_FAKE_EXIT"
             .env("SSUBMIT_FAKE_STDOUT", &self.stdout)
             .env("SSUBMIT_FAKE_STDERR", &self.stderr)
             .env("SSUBMIT_FAKE_EXIT", self.exit_code.to_string());
+        if self.terminate_by_signal {
+            command.env("SSUBMIT_FAKE_SIGNAL", "1");
+        }
         command
     }
 
@@ -146,39 +160,68 @@ fn assert_matches_schema(response: &Value) {
         .expect("response.ok must be a boolean");
 
     if ok {
-        assert_required_fields(
-            &response["plan"],
-            &schema["definitions"]["plan"]["required"],
-            "plan",
-        );
-        assert_required_string_fields(
-            &response["plan"]["job"],
-            &schema["definitions"]["job"],
-            "plan.job",
-        );
-        assert_required_fields(
-            &response["plan"]["slurm"],
-            &schema["definitions"]["slurm"]["required"],
-            "plan.slurm",
-        );
-        assert!(
-            response["plan"]["slurm"]["executable"].is_string(),
-            "plan.slurm.executable must be a string"
-        );
-        assert!(
-            response["plan"]["slurm"]["script"].is_string(),
-            "plan.slurm.script must be a string"
-        );
-        assert!(
-            response["plan"]["slurm"]["arguments"]
-                .as_array()
-                .expect("plan.slurm.arguments must be an array")
-                .iter()
-                .all(Value::is_string),
-            "plan.slurm.arguments must contain only strings"
-        );
+        match operation {
+            "plan" | "test" => assert!(response["plan"].is_object()),
+            "submit" => assert!(response["submission"].is_object()),
+            _ => unreachable!("operation enum was checked above"),
+        }
+        if response["plan"].is_object() {
+            assert_required_fields(
+                &response["plan"],
+                &schema["definitions"]["plan"]["required"],
+                "plan",
+            );
+            assert_required_string_fields(
+                &response["plan"]["job"],
+                &schema["definitions"]["job"],
+                "plan.job",
+            );
+            assert_required_fields(
+                &response["plan"]["slurm"],
+                &schema["definitions"]["slurm"]["required"],
+                "plan.slurm",
+            );
+            assert!(
+                response["plan"]["slurm"]["executable"].is_string(),
+                "plan.slurm.executable must be a string"
+            );
+            assert!(
+                response["plan"]["slurm"]["script"].is_string(),
+                "plan.slurm.script must be a string"
+            );
+            assert!(
+                response["plan"]["slurm"]["arguments"]
+                    .as_array()
+                    .expect("plan.slurm.arguments must be an array")
+                    .iter()
+                    .all(Value::is_string),
+                "plan.slurm.arguments must contain only strings"
+            );
+        }
+        if response["submission"].is_object() {
+            assert_required_fields(
+                &response["submission"],
+                &schema["definitions"]["submission"]["required"],
+                "submission",
+            );
+            assert!(
+                response["submission"]["job_id"].is_string(),
+                "submission.job_id must be a string"
+            );
+            assert!(
+                response["submission"]["cluster"].is_null()
+                    || response["submission"]["cluster"].is_string(),
+                "submission.cluster must be null or a string"
+            );
+        }
     } else {
         assert_required_string_fields(&response["error"], &schema["definitions"]["error"], "error");
+        if response["error"].get("exit_code").is_some() {
+            assert!(response["error"]["exit_code"].is_i64());
+        }
+        if response["error"].get("stderr").is_some() {
+            assert!(response["error"]["stderr"].is_string());
+        }
     }
 }
 
@@ -325,5 +368,162 @@ fn json_interactive_request_returns_a_structured_validation_error() {
         .as_str()
         .expect("validation error message")
         .contains("interactive"));
+    assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_submission_returns_job_id_without_a_cluster() {
+    let fake = FakeSbatch::new("987654\n", "", 0);
+
+    let output = fake.run(&["--json", "example", "echo hello"]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.trim_start().starts_with('{'));
+    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["schema_version"], json!(1));
+    assert_eq!(response["operation"], json!("submit"));
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["submission"]["job_id"], json!("987654"));
+    assert!(response["submission"]["cluster"].is_null());
+    assert_eq!(
+        response["plan"]["slurm"]["arguments"],
+        json!(["--export=ALL", "--parsable"])
+    );
+    assert_eq!(fake.recorded_args(), "--export=ALL\n--parsable\n");
+    assert!(fake
+        .recorded_script()
+        .contains("#SBATCH --job-name=example"));
+}
+
+#[test]
+fn json_submission_parses_cluster_and_deduplicates_parsable_options() {
+    let fake = FakeSbatch::new("42;gpu-cluster\n", "", 0);
+
+    let output = fake.run(&[
+        "--json",
+        "example",
+        "echo hello",
+        "--",
+        "--partition=short",
+        "--parsable",
+        "--parsable",
+    ]);
+
+    assert!(output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["submission"]["job_id"], json!("42"));
+    assert_eq!(response["submission"]["cluster"], json!("gpu-cluster"));
+    assert_eq!(
+        response["plan"]["slurm"]["arguments"],
+        json!(["--partition=short", "--parsable", "--export=ALL"])
+    );
+    assert_eq!(
+        fake.recorded_args(),
+        "--partition=short\n--parsable\n--export=ALL\n"
+    );
+}
+
+#[test]
+fn json_submission_rejected_by_slurm_returns_structured_error() {
+    let fake = FakeSbatch::new("", "sbatch: error: Invalid partition name\n", 1);
+
+    let output = fake.run(&["--json", "example", "echo hello"]);
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["operation"], json!("submit"));
+    assert_eq!(response["ok"], json!(false));
+    assert_eq!(response["error"]["kind"], json!("slurm"));
+    assert_eq!(response["error"]["exit_code"], json!(1));
+    assert_eq!(
+        response["error"]["stderr"],
+        json!("sbatch: error: Invalid partition name")
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid partition name"));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .ends_with('}'));
+}
+
+#[test]
+fn json_submission_rejects_empty_and_malformed_success_output() {
+    for (stdout, expected_message) in [
+        ("", "empty output"),
+        ("123 bad\n", "malformed parsable output"),
+        ("123;cluster;extra\n", "malformed parsable output"),
+    ] {
+        let fake = FakeSbatch::new(stdout, "", 0);
+        let output = fake.run(&["--json", "example", "echo hello"]);
+
+        assert!(
+            !output.status.success(),
+            "output {stdout:?} unexpectedly passed"
+        );
+        let response = parse_json(&output);
+        assert_matches_schema(&response);
+        assert_eq!(response["operation"], json!("submit"));
+        assert_eq!(response["ok"], json!(false));
+        assert_eq!(response["error"]["kind"], json!("output"));
+        assert!(response["error"]["message"]
+            .as_str()
+            .expect("output parsing message")
+            .contains(expected_message));
+    }
+}
+
+#[test]
+fn json_submission_reports_launch_failure_without_invoking_sbatch() {
+    let fake = FakeSbatch::new("unused", "unused", 0);
+
+    let output = fake
+        .command()
+        .env("PATH", "/usr/bin:/bin")
+        .args(["--json", "example", "echo hello"])
+        .output()
+        .expect("run ssubmit without sbatch");
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["error"]["kind"], json!("process"));
+    assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_submission_reports_signal_termination() {
+    let fake = FakeSbatch::terminating_by_signal("", "sbatch: interrupted\n");
+
+    let output = fake.run(&["--json", "example", "echo hello"]);
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["error"]["kind"], json!("process"));
+    assert!(response["error"]["message"]
+        .as_str()
+        .expect("signal error message")
+        .contains("signal"));
+    assert_eq!(response["error"]["stderr"], json!("sbatch: interrupted"));
+}
+
+#[test]
+fn json_submission_rejects_quiet_passthrough_option() {
+    let fake = FakeSbatch::new("unexpected", "unexpected", 0);
+
+    let output = fake.run(&["--json", "example", "echo hello", "--", "--quiet"]);
+
+    assert!(!output.status.success());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["error"]["kind"], json!("validation"));
+    assert!(response["error"]["message"]
+        .as_str()
+        .expect("quiet validation message")
+        .contains("quiet"));
     assert!(!Path::new(&fake.invoked_path).exists());
 }

@@ -92,7 +92,8 @@ pub struct Cli {
     /// Print the sbatch command and submission script that would be executed, but do not execute them
     #[arg(short = 'n', long)]
     pub dry_run: bool,
-    /// Print a versioned machine-readable response. Currently requires --dry-run.
+    /// Print a versioned machine-readable response. Dry runs return a plan; batch submissions
+    /// return a Slurm job identifier. JSON mode does not support interactive jobs.
     #[arg(long)]
     pub json: bool,
     /// Return an estimate of when the job would be scheduled to run given the current

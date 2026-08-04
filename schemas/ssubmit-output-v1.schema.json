@@ -26,6 +26,9 @@
     "plan": {
       "$ref": "#/definitions/plan"
     },
+    "submission": {
+      "$ref": "#/definitions/submission"
+    },
     "error": {
       "$ref": "#/definitions/error"
     }
@@ -33,6 +36,35 @@
   "oneOf": [
     {
       "properties": {
+        "operation": {
+          "const": "plan"
+        },
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "plan"
+      ]
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "submit"
+        },
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "submission"
+      ]
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "test"
+        },
         "ok": {
           "const": true
         }
@@ -125,6 +157,24 @@
         }
       }
     },
+    "submission": {
+      "type": "object",
+      "required": [
+        "job_id",
+        "cluster"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "cluster": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "error": {
       "type": "object",
       "required": [
@@ -136,6 +186,12 @@
           "type": "string"
         },
         "message": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "stderr": {
           "type": "string"
         }
       }
