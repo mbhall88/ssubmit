@@ -8,7 +8,7 @@ use ssubmit::SlurmTime;
 
 const SSUBMIT_SHEBANG: &str = "SSUBMIT_SHEBANG";
 const SSUBMIT_MEMORY: &str = "SSUBMIT_MEMORY";
-const SSUUBMIT_TIME: &str = "SSUBMIT_TIME";
+const SSUBMIT_TIME: &str = "SSUBMIT_TIME";
 const SSUBMIT_SET: &str = "SSUBMIT_SET";
 
 /// Submit sbatch jobs without having to create a submission script
@@ -72,7 +72,7 @@ pub struct Cli {
     /// Run `man sbatch | grep -A 7 'time=<'` for more details. If a single digit is passed, it will
     /// be passed straight to sbatch (i.e. minutes). However, 5m5 will be considered 5 minutes and
     /// 5 seconds.
-    #[arg(short, long, value_parser = parse_time, default_value = "1d", env = SSUUBMIT_TIME)]
+    #[arg(short, long, value_parser = parse_time, default_value = "1d", env = SSUBMIT_TIME)]
     pub time: String,
     /// The shell shebang for the submission script
     #[arg(short = 'S', long, default_value = "#!/usr/bin/env bash", env = SSUBMIT_SHEBANG)]
@@ -645,7 +645,7 @@ mod tests {
     fn test_cli_parse_set_time_with_environment_variable() {
         let time = "1:0";
         unsafe {
-            std::env::set_var(SSUUBMIT_TIME, time);
+            std::env::set_var(SSUBMIT_TIME, time);
         }
 
         let args = Cli::parse_from(["ssubmit", "name", "command"]);

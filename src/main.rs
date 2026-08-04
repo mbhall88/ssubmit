@@ -114,10 +114,16 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
                 };
             }
             Some(c) => {
-                error!(
-                    "Failed to submit job with exit code {c} and stderr {}",
-                    String::from_utf8_lossy(&sbatch_output.stderr)
-                );
+                let stderr = String::from_utf8_lossy(&sbatch_output.stderr)
+                    .trim_end()
+                    .to_string();
+                let message = if stderr.is_empty() {
+                    format!("Failed to submit job with exit code {c}")
+                } else {
+                    format!("Failed to submit job with exit code {c}: {stderr}")
+                };
+                error!("{message}");
+                return Err(anyhow!("{}", message));
             }
             None => return Err(anyhow!("Process terminated by signal")),
         }
