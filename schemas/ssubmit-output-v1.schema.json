@@ -29,6 +29,9 @@
     "submission": {
       "$ref": "#/definitions/submission"
     },
+    "test": {
+      "$ref": "#/definitions/test"
+    },
     "error": {
       "$ref": "#/definitions/error"
     }
@@ -70,7 +73,8 @@
         }
       },
       "required": [
-        "plan"
+        "plan",
+        "test"
       ]
     },
     {
@@ -172,6 +176,21 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "test": {
+      "type": "object",
+      "required": [
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
         }
       }
     },

@@ -5,8 +5,8 @@ use log::{error, info, LevelFilter};
 use std::process::Command;
 
 use ssubmit::{
-    classify_sbatch_failure, make_submission_plan, prepare_machine_submission, run_sbatch,
-    submit_sbatch, JsonResponse, SubmissionError,
+    classify_sbatch_failure, make_submission_plan, prepare_machine_submission,
+    prepare_machine_test, run_sbatch, submit_sbatch, test_sbatch, JsonResponse, SubmissionError,
 };
 
 use crate::cli::Cli;
@@ -63,6 +63,19 @@ fn emit_json_submission_error(plan: ssubmit::SubmissionPlan, error: SubmissionEr
     Err(anyhow!("{}", message))
 }
 
+fn emit_json_scheduler_test_error(
+    plan: ssubmit::SubmissionPlan,
+    error: SubmissionError,
+) -> Result<()> {
+    let message = error.message.clone();
+    if let Some(stderr) = error.stderr.as_deref() {
+        eprintln!("{stderr}");
+    }
+    let response = JsonResponse::scheduler_test_error(plan, error);
+    emit_json_response(response)?;
+    Err(anyhow!("{}", message))
+}
+
 fn human_submission_error(error: &SubmissionError) -> String {
     match &error.stderr {
         Some(stderr) => format!("{}: {stderr}", error.message),
@@ -86,12 +99,20 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
     );
 
     if args.json {
+        let test_only = plan.slurm.arguments.iter().any(|arg| arg == "--test-only");
         if args.dry_run {
             return emit_json_response(JsonResponse::plan(plan));
         }
 
-        if args.test_only {
-            return emit_json_error("JSON mode currently requires --dry-run");
+        if test_only {
+            let test_plan = match prepare_machine_test(&plan) {
+                Ok(plan) => plan,
+                Err(error) => return emit_json_scheduler_test_error(plan, error),
+            };
+            return match test_sbatch(&test_plan) {
+                Ok(result) => emit_json_response(JsonResponse::scheduler_test(test_plan, result)),
+                Err(error) => emit_json_scheduler_test_error(test_plan, error),
+            };
         }
 
         let machine_plan = match prepare_machine_submission(&plan) {
