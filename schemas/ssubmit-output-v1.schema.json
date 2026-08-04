@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/mbhall88/ssubmit/schemas/ssubmit-output-v1.schema.json",
+  "title": "ssubmit machine output version 1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "operation",
+    "ok"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "test",
+        "submit"
+      ]
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "plan": {
+      "$ref": "#/definitions/plan"
+    },
+    "error": {
+      "$ref": "#/definitions/error"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "ok": {
+          "const": true
+        }
+      },
+      "required": [
+        "plan"
+      ]
+    },
+    {
+      "properties": {
+        "ok": {
+          "const": false
+        }
+      },
+      "required": [
+        "error"
+      ]
+    }
+  ],
+  "definitions": {
+    "plan": {
+      "type": "object",
+      "required": [
+        "job",
+        "slurm"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/definitions/job"
+        },
+        "slurm": {
+          "$ref": "#/definitions/slurm"
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": [
+        "name",
+        "command",
+        "memory",
+        "time",
+        "output",
+        "error",
+        "export"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "export": {
+          "type": "string"
+        }
+      }
+    },
+    "slurm": {
+      "type": "object",
+      "required": [
+        "executable",
+        "arguments",
+        "script"
+      ],
+      "properties": {
+        "executable": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "script": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "kind",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

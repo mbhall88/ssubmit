@@ -25,6 +25,8 @@ env_logger = "0.11.5"
 duration-str = "0.11.2"
 byte-unit = "5.1.4"
 sysinfo = "0.30"
+serde = { version = "1.0.160", features = ["derive"] }
+serde_json = "1.0.99"
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.

@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use serde_json::{json, Value};
+
 static NEXT_TEMP_DIR: AtomicUsize = AtomicUsize::new(0);
 
 struct FakeSbatch {
@@ -84,6 +86,102 @@ exit "$SSUBMIT_FAKE_EXIT"
     }
 }
 
+fn parse_json(output: &Output) -> Value {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).expect("parse one JSON response")
+}
+
+fn assert_required_fields(value: &Value, required: &Value, label: &str) {
+    let object = value.as_object().expect("schema value must be an object");
+    for property in required.as_array().expect("schema required properties") {
+        let property = property.as_str().expect("schema property name");
+        assert!(
+            object.contains_key(property),
+            "{label} is missing required property {property}"
+        );
+    }
+}
+
+fn assert_required_string_fields(value: &Value, schema: &Value, label: &str) {
+    let object = value.as_object().expect("schema value must be an object");
+    let required = schema["required"]
+        .as_array()
+        .expect("schema required properties");
+    for property in required {
+        let property = property.as_str().expect("schema property name");
+        assert!(
+            object.get(property).and_then(Value::as_str).is_some(),
+            "{label}.{property} must be a string"
+        );
+    }
+}
+
+fn assert_matches_schema(response: &Value) {
+    let schema: Value =
+        serde_json::from_str(include_str!("../schemas/ssubmit-output-v1.schema.json"))
+            .expect("parse committed JSON schema");
+
+    // Keep this dependency-free for the project's Rust 1.58 MSRV. These
+    // assertions mirror every draft-07 constraint used by schema v1.
+    assert_required_fields(response, &schema["required"], "response");
+    assert_eq!(
+        response["schema_version"],
+        schema["properties"]["schema_version"]["const"]
+    );
+
+    let operation = response["operation"]
+        .as_str()
+        .expect("response.operation must be a string");
+    let operations = schema["properties"]["operation"]["enum"]
+        .as_array()
+        .expect("schema operation enum");
+    assert!(
+        operations
+            .iter()
+            .any(|value| value.as_str() == Some(operation)),
+        "unsupported response operation {operation}"
+    );
+    let ok = response["ok"]
+        .as_bool()
+        .expect("response.ok must be a boolean");
+
+    if ok {
+        assert_required_fields(
+            &response["plan"],
+            &schema["definitions"]["plan"]["required"],
+            "plan",
+        );
+        assert_required_string_fields(
+            &response["plan"]["job"],
+            &schema["definitions"]["job"],
+            "plan.job",
+        );
+        assert_required_fields(
+            &response["plan"]["slurm"],
+            &schema["definitions"]["slurm"]["required"],
+            "plan.slurm",
+        );
+        assert!(
+            response["plan"]["slurm"]["executable"].is_string(),
+            "plan.slurm.executable must be a string"
+        );
+        assert!(
+            response["plan"]["slurm"]["script"].is_string(),
+            "plan.slurm.script must be a string"
+        );
+        assert!(
+            response["plan"]["slurm"]["arguments"]
+                .as_array()
+                .expect("plan.slurm.arguments must be an array")
+                .iter()
+                .all(Value::is_string),
+            "plan.slurm.arguments must contain only strings"
+        );
+    } else {
+        assert_required_string_fields(&response["error"], &schema["definitions"]["error"], "error");
+    }
+}
+
 impl Drop for FakeSbatch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.directory);
@@ -156,4 +254,76 @@ fn documented_time_environment_variable_controls_the_submission_script() {
 
     assert!(output.status.success());
     assert!(String::from_utf8_lossy(&output.stdout).contains("#SBATCH --time=3:0:0"));
+}
+
+#[test]
+fn json_dry_run_returns_a_versioned_plan_without_invoking_sbatch() {
+    let fake = FakeSbatch::new("unexpected output", "unexpected error", 99);
+
+    let output = fake.run(&[
+        "--dry-run",
+        "--json",
+        "--mem",
+        "2G",
+        "--time",
+        "2h",
+        "example",
+        "echo hello",
+        "--",
+        "--cpus-per-task=8",
+        "--partition=short",
+        "--export=NONE",
+    ]);
+
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).is_empty());
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["schema_version"], json!(1));
+    assert_eq!(response["operation"], json!("plan"));
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["plan"]["job"]["name"], json!("example"));
+    assert_eq!(response["plan"]["job"]["command"], json!("echo hello"));
+    assert_eq!(response["plan"]["job"]["memory"], json!("2000M"));
+    assert_eq!(response["plan"]["job"]["time"], json!("2:0:0"));
+    assert_eq!(response["plan"]["job"]["output"], json!("%x.out"));
+    assert_eq!(response["plan"]["job"]["error"], json!("%x.err"));
+    assert_eq!(response["plan"]["job"]["export"], json!("NONE"));
+    assert_eq!(
+        response["plan"]["slurm"]["arguments"],
+        json!(["--cpus-per-task=8", "--partition=short", "--export=NONE"])
+    );
+    assert_eq!(response["plan"]["slurm"]["executable"], json!("sbatch"));
+    assert!(response["plan"]["slurm"]["script"]
+        .as_str()
+        .expect("plan script")
+        .contains("#SBATCH --job-name=example"));
+    assert!(!Path::new(&fake.invoked_path).exists());
+}
+
+#[test]
+fn json_interactive_request_returns_a_structured_validation_error() {
+    let fake = FakeSbatch::new("unexpected output", "unexpected error", 99);
+
+    let output = fake.run(&[
+        "--dry-run",
+        "--json",
+        "--interactive",
+        "interactive-example",
+    ]);
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr)
+        .contains("JSON mode does not support interactive jobs"));
+    let response = parse_json(&output);
+    assert_matches_schema(&response);
+    assert_eq!(response["schema_version"], json!(1));
+    assert_eq!(response["operation"], json!("plan"));
+    assert_eq!(response["ok"], json!(false));
+    assert_eq!(response["error"]["kind"], json!("validation"));
+    assert!(response["error"]["message"]
+        .as_str()
+        .expect("validation error message")
+        .contains("interactive"));
+    assert!(!Path::new(&fake.invoked_path).exists());
 }

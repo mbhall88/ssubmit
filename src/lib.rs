@@ -3,6 +3,75 @@ use std::fmt::Write as _;
 use std::time::Duration; // import without risk of name clashing
 
 use log::warn;
+use serde::Serialize;
+
+pub const JSON_SCHEMA_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JobSpec {
+    pub name: String,
+    pub command: String,
+    pub memory: String,
+    pub time: String,
+    pub output: String,
+    pub error: String,
+    pub export: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SlurmPlan {
+    pub executable: String,
+    pub arguments: Vec<String>,
+    pub script: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SubmissionPlan {
+    pub job: JobSpec,
+    pub slurm: SlurmPlan,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JsonError {
+    pub kind: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JsonResponse {
+    pub schema_version: u8,
+    pub operation: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan: Option<SubmissionPlan>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<JsonError>,
+}
+
+impl JsonResponse {
+    pub fn plan(plan: SubmissionPlan) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "plan".to_string(),
+            ok: true,
+            plan: Some(plan),
+            error: None,
+        }
+    }
+
+    pub fn error(kind: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            schema_version: JSON_SCHEMA_VERSION,
+            operation: "plan".to_string(),
+            ok: false,
+            plan: None,
+            error: Some(JsonError {
+                kind: kind.into(),
+                message: message.into(),
+            }),
+        }
+    }
+}
 
 static SCRIPT_TEMPLATE: &str = r#"$shebang$
 #SBATCH --job-name=$name$
@@ -50,6 +119,69 @@ pub fn make_submission_script(
     } else {
         script
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn make_submission_plan(
+    shebang: &str,
+    set: &str,
+    name: &str,
+    memory: &str,
+    time: &str,
+    error: &str,
+    output: &str,
+    command: &str,
+    remainder: &[String],
+    export: &str,
+    test_only: bool,
+) -> SubmissionPlan {
+    let script = make_submission_script(shebang, set, name, memory, time, error, output, command);
+    let effective_export = effective_export(remainder, export);
+
+    let mut arguments = remainder.to_vec();
+    if !arguments.iter().any(|arg| arg.starts_with("--export")) {
+        arguments.push(format!("--export={export}"));
+    }
+
+    if test_only {
+        arguments.push("--test-only".to_string());
+    }
+
+    SubmissionPlan {
+        job: JobSpec {
+            name: name.to_string(),
+            command: command.to_string(),
+            memory: memory.to_string(),
+            time: time.to_string(),
+            output: output.to_string(),
+            error: error.to_string(),
+            export: effective_export,
+        },
+        slurm: SlurmPlan {
+            executable: "sbatch".to_string(),
+            arguments,
+            script,
+        },
+    }
+}
+
+fn effective_export(remainder: &[String], default: &str) -> String {
+    let mut export = default.to_string();
+    let mut index = 0;
+
+    while index < remainder.len() {
+        if let Some(value) = remainder[index].strip_prefix("--export=") {
+            export = value.to_string();
+        } else if remainder[index] == "--export" {
+            if let Some(value) = remainder.get(index + 1) {
+                export = value.to_string();
+                index += 1;
+            }
+        }
+        index += 1;
+    }
+
+    export
 }
 
 pub trait SlurmTime {

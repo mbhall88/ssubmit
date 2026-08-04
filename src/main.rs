@@ -5,7 +5,7 @@ use log::{error, info, LevelFilter};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use ssubmit::make_submission_script;
+use ssubmit::{make_submission_plan, JsonResponse};
 
 use crate::cli::Cli;
 
@@ -21,8 +21,16 @@ fn main() -> Result<()> {
         .format_module_path(false)
         .init();
 
+    if args.json && args.interactive {
+        return emit_json_error("JSON mode does not support interactive jobs");
+    }
+
     // Validate and get the command to execute
-    let command = args.validate_and_get_command().map_err(|e| anyhow!(e))?;
+    let command = match args.validate_and_get_command() {
+        Ok(command) => command,
+        Err(error) if args.json => return emit_json_error(error),
+        Err(error) => return Err(anyhow!(error)),
+    };
 
     if args.interactive {
         handle_interactive_job(&args, &command)
@@ -31,8 +39,21 @@ fn main() -> Result<()> {
     }
 }
 
+fn emit_json_response(response: JsonResponse) -> Result<()> {
+    let output = serde_json::to_string(&response).context("Failed to render JSON response")?;
+    println!("{output}");
+    Ok(())
+}
+
+fn emit_json_error(message: impl Into<String>) -> Result<()> {
+    let message = message.into();
+    let response = JsonResponse::error("validation", message.clone());
+    emit_json_response(response)?;
+    Err(anyhow!("{}", message))
+}
+
 fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
-    let script = make_submission_script(
+    let plan = make_submission_plan(
         &args.shebang,
         &args.set,
         &args.name,
@@ -41,42 +62,34 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
         &args.error,
         &args.output,
         command,
+        &args.remainder,
+        &args.export,
+        args.test_only,
     );
 
-    let mut sbatch_opts = args.remainder.clone();
-
-    // Add --export option unless user already specified it in remainder args
-    let has_export = sbatch_opts.iter().any(|arg| arg.starts_with("--export"));
-    if !has_export {
-        sbatch_opts.push(format!("--export={}", args.export));
-    }
-
-    let test_only = if args.test_only {
-        sbatch_opts.push("--test-only".to_string());
-        true
-    } else {
-        let mut test_only = false;
-        for arg in &args.remainder {
-            if arg == "--test-only" {
-                test_only = true;
-                break;
-            }
+    if args.json {
+        if !args.dry_run {
+            return emit_json_error("JSON mode currently requires --dry-run");
         }
-        test_only
-    };
+        return emit_json_response(JsonResponse::plan(plan));
+    }
 
     if args.dry_run {
         info!("Dry run requested. Nothing submitted");
-        let sbatch_opts: String = sbatch_opts.join(" ");
+        let sbatch_opts = plan.slurm.arguments.join(" ");
         if sbatch_opts.is_empty() {
             println!("sbatch <script>")
         } else {
             println!("sbatch {sbatch_opts} <script>")
         }
-        println!("=====<script>=====\n{script}=====<script>=====");
+        println!(
+            "=====<script>=====\n{}=====<script>=====",
+            plan.slurm.script
+        );
     } else {
-        let mut sbatch_child = Command::new("sbatch")
-            .args(&sbatch_opts)
+        let test_only = plan.slurm.arguments.iter().any(|arg| arg == "--test-only");
+        let mut sbatch_child = Command::new(&plan.slurm.executable)
+            .args(&plan.slurm.arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -89,7 +102,7 @@ fn handle_batch_job(args: &Cli, command: &str) -> Result<()> {
                 .as_mut()
                 .context("Failed to connect to stdio of sbatch process")?;
             stdin
-                .write_all(script.as_bytes())
+                .write_all(plan.slurm.script.as_bytes())
                 .context("Failed to write to sbatch process' stdin")?;
         }
         let sbatch_output = sbatch_child
@@ -214,6 +227,7 @@ mod tests {
             shebang: "#!/usr/bin/env bash".to_string(),
             set: "euxo pipefail".to_string(),
             dry_run: true, // Use dry_run to avoid actually running sbatch
+            json: false,
             test_only: false,
             interactive: false,
             shell: "bash".to_string(),

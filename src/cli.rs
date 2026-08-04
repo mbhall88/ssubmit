@@ -92,6 +92,9 @@ pub struct Cli {
     /// Print the sbatch command and submission script that would be executed, but do not execute them
     #[arg(short = 'n', long)]
     pub dry_run: bool,
+    /// Print a versioned machine-readable response. Currently requires --dry-run.
+    #[arg(long)]
+    pub json: bool,
     /// Return an estimate of when the job would be scheduled to run given the current
     /// queue. No job is actually submitted. [sbatch --test-only]
     #[arg(short = 'T', long)]
@@ -703,6 +706,7 @@ mod tests {
             shebang: "#!/usr/bin/env bash".to_string(),
             set: "euxo pipefail".to_string(),
             dry_run: false,
+            json: false,
             test_only: false,
             interactive: true,
             shell: "zsh".to_string(),
@@ -726,6 +730,7 @@ mod tests {
             shebang: "#!/usr/bin/env bash".to_string(),
             set: "euxo pipefail".to_string(),
             dry_run: false,
+            json: false,
             test_only: false,
             interactive: true,
             shell: "bash".to_string(),
@@ -749,6 +754,7 @@ mod tests {
             shebang: "#!/usr/bin/env bash".to_string(),
             set: "euxo pipefail".to_string(),
             dry_run: false,
+            json: false,
             test_only: false,
             interactive: false,
             shell: "bash".to_string(),
@@ -776,6 +782,7 @@ mod tests {
             shebang: "#!/usr/bin/env bash".to_string(),
             set: "euxo pipefail".to_string(),
             dry_run: false,
+            json: false,
             test_only: false,
             interactive: false,
             shell: "bash".to_string(),
