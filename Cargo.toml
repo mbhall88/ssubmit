@@ -30,3 +30,8 @@ serde_json = "1.0.99"
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

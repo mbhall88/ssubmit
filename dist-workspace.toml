@@ -1,0 +1,58 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app. Shell only: ssubmit targets Slurm
+# clusters, which are Unix/macOS, so a PowerShell installer and a Homebrew tap
+# would be dead weight (see issue #18).
+installers = ["shell"]
+# Target platforms to build apps for (Rust target-triple syntax). This is the
+# same matrix the hand-built release workflow published, so existing users keep
+# the artefacts they already download. No Windows targets.
+targets = [
+    "x86_64-unknown-linux-musl",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "i686-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# .tar.gz rather than dist's .tar.xz default, for two reasons: it matches what
+# the hand-built workflow published, so install/install.sh keeps working through
+# the transition (see docs/releasing.md); and xz is not always present on the
+# older cluster login nodes this tool runs on, whereas gzip always is.
+unix-archive = ".tar.gz"
+# Where to host releases
+hosting = "github"
+# Whether to install an updater program
+install-updater = false
+# release-please creates the GitHub Release (as a draft, tagging immediately via
+# force-tag-creation so this workflow still triggers on tag push — see
+# release-please-config.json). dist just uploads binaries to that existing draft
+# and undrafts it, instead of creating a second, competing Release.
+create-release = false
+# Publish jobs to run in CI. dist has no builtin crates.io publisher, so
+# crates.io publishing is a custom reusable workflow — see
+# .github/workflows/publish-crates.yml. conda-forge is unaffected: its feedstock
+# bot watches crates.io/GitHub releases and needs nothing from this repo.
+publish-jobs = ["./publish-crates"]
+# Run plan *and* build on pull requests, so a PR proves the whole target matrix
+# and the installer still build before anything is tagged. Artifacts stay in the
+# workflow's zip: "upload" stops short of the host/publish/announce jobs, so
+# nothing reaches a GitHub Release or crates.io from a PR.
+pr-run-mode = "upload"
+
+# dist grants every custom publish job `id-token: write` + `packages: write` by
+# default. publish-crates does no OIDC federation (crates.io auth is a static
+# token), and `id-token: write` granted with no corresponding OIDC use has been
+# seen to make GitHub reject the whole workflow at parse time. Narrow it to what
+# the job actually needs.
+[dist.github-custom-job-permissions]
+publish-crates = { contents = "read" }

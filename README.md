@@ -32,7 +32,14 @@ wget -qO- https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/instal
 ```
 
 The installer downloads the latest release binary; it does not install the Agent
-Skill. You can pass options to the script like so
+Skill.
+
+> [!NOTE]
+> Releases are moving to a generated `ssubmit-installer.sh` published as a
+> release asset. This script keeps working in the meantime; see
+> [docs/releasing.md](docs/releasing.md) for the transition.
+
+You can pass options to the script like so
 
 ```
 $ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh -s -- --help
