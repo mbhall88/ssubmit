@@ -26,50 +26,62 @@ Skill provide a stable interface for agents running locally on a Slurm cluster.
 ### Release installer
 
 ```shell
-curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mbhall88/ssubmit/releases/latest/download/ssubmit-installer.sh | sh
 # or with wget
-wget -qO- https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh
+wget -qO- https://github.com/mbhall88/ssubmit/releases/latest/download/ssubmit-installer.sh | sh
 ```
 
-The installer downloads the latest release binary; it does not install the Agent
-Skill.
+The installer detects your platform, downloads the matching binary from the
+latest release and installs it to `$CARGO_HOME/bin` (or `~/.cargo/bin`), adding
+that directory to your `PATH` via your shell profiles. It does not install the
+Agent Skill.
 
-> [!NOTE]
-> Releases are moving to a generated `ssubmit-installer.sh` published as a
-> release asset. This script keeps working in the meantime; see
-> [docs/releasing.md](docs/releasing.md) for the transition.
+To install somewhere else — a shared location on a cluster, say — set
+`SSUBMIT_INSTALL_DIR`, and pass `--no-modify-path` if you manage `PATH`
+yourself:
+
+```shell
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mbhall88/ssubmit/releases/latest/download/ssubmit-installer.sh \
+  | SSUBMIT_INSTALL_DIR=/apps/ssubmit sh -s -- --no-modify-path
+```
 
 You can pass options to the script like so
 
 ```
-$ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh -s -- --help
-install.sh [option]
+$ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/mbhall88/ssubmit/releases/latest/download/ssubmit-installer.sh | sh -s -- --help
+ssubmit-installer.sh
 
-Fetch and install the latest version of ssubmit, if ssubmit is already
-installed it will be updated to the latest version.
+The installer for ssubmit
 
-Options
-        -V, --verbose
-                Enable verbose output for the installer
+This script detects what platform you're on and fetches an appropriate archive from
+https://github.com/mbhall88/ssubmit/releases
+then unpacks the binaries and installs them to
 
-        -f, -y, --force, --yes
-                Skip the confirmation prompt during installation
+    $CARGO_HOME/bin (or $HOME/.cargo/bin)
 
-        -p, --platform
-                Override the platform identified by the installer [default: apple-darwin]
+It will then add that dir to PATH by adding the appropriate line to your shell profiles.
 
-        -b, --bin-dir
-                Override the bin installation directory [default: /usr/local/bin]
+USAGE:
+    ssubmit-installer.sh [OPTIONS]
 
-        -a, --arch
-                Override the architecture identified by the installer [default: x86_64]
+OPTIONS:
+    -v, --verbose
+            Enable verbose output
 
-        -B, --base-url
-                Override the base URL used for downloading releases [default: https://github.com/mbhall88/ssubmit/releases]
+    -q, --quiet
+            Disable progress output
 
-        -h, --help
-                Display this help message
+        --no-modify-path
+            Don't configure the PATH environment variable
+
+    -h, --help
+            Print help information
 ```
+
+Every release also carries plain archives per target, plus `sha256.sum` and a
+`.sha256` beside each file, if you would rather install by hand. Binaries are
+built for x86-64 and aarch64 Linux (musl and gnu), i686 Linux (musl), and Intel
+and Apple silicon macOS.
 
 ### Cargo
 
