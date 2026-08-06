@@ -3,7 +3,7 @@
 [![Rust CI](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbhall88/ssubmit/actions/workflows/ci.yaml)
 [![Crates.io](https://img.shields.io/crates/v/ssubmit.svg)](https://crates.io/crates/ssubmit)
 
-Submit Slurm batch jobs without writing an `sbatch` script.
+Submit sbatch jobs without having to create a submission script
 
 - [Motivation](#motivation)
 - [Install](#install)
@@ -13,10 +13,13 @@ Submit Slurm batch jobs without writing an `sbatch` script.
 
 ## Motivation
 
-`ssubmit` wraps `sbatch` so a command, its resources and its output settings can
-be submitted directly from a shell. Human-readable invocations remain the
-default. JSON output and the bundled Agent Skill provide a stable interface for
-agents running locally on a Slurm cluster.
+This project is motivated by the fact that I want to just be able to submit commands as
+jobs and I don't want to fluff around with making a submission script.
+
+`ssubmit` wraps that whole process and lets you live your best lyf #blessed.
+
+Human-readable invocations remain the default. JSON output and the bundled Agent
+Skill provide a stable interface for agents running locally on a Slurm cluster.
 
 ## Install
 
@@ -28,90 +31,234 @@ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88
 wget -qO- https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh
 ```
 
-Pass `--yes` to skip the installer confirmation prompt. The installer downloads
-the latest release binary; it does not install the Agent Skill.
+The installer downloads the latest release binary; it does not install the Agent
+Skill. You can pass options to the script like so
+
+```
+$ curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/mbhall88/ssubmit/main/install/install.sh | sh -s -- --help
+install.sh [option]
+
+Fetch and install the latest version of ssubmit, if ssubmit is already
+installed it will be updated to the latest version.
+
+Options
+        -V, --verbose
+                Enable verbose output for the installer
+
+        -f, -y, --force, --yes
+                Skip the confirmation prompt during installation
+
+        -p, --platform
+                Override the platform identified by the installer [default: apple-darwin]
+
+        -b, --bin-dir
+                Override the bin installation directory [default: /usr/local/bin]
+
+        -a, --arch
+                Override the architecture identified by the installer [default: x86_64]
+
+        -B, --base-url
+                Override the base URL used for downloading releases [default: https://github.com/mbhall88/ssubmit/releases]
+
+        -h, --help
+                Display this help message
+```
 
 ### Cargo
 
+![Crates.io Version](https://img.shields.io/crates/v/ssubmit)
+![Crates.io Total Downloads](https://img.shields.io/crates/d/ssubmit)
+
 ```shell
-cargo install ssubmit
+$ cargo install ssubmit
 ```
 
 ### Conda
 
+![Conda Version](https://img.shields.io/conda/v/conda-forge/ssubmit)
+![Conda Downloads](https://img.shields.io/conda/d/conda-forge/ssubmit)
+
 ```shell
-conda install -c conda-forge ssubmit
+$ conda install -c conda-forge ssubmit
 ```
 
 ### Build from source
 
 ```shell
-git clone https://github.com/mbhall88/ssubmit.git
-cd ssubmit
-cargo build --release
-target/release/ssubmit --help
+$ git clone https://github.com/mbhall88/ssubmit.git
+$ cd ssubmit
+$ cargo build --release
+$ target/release/ssubmit -h
 ```
 
 ## Usage
 
-Submit an rsync job named `foo` with 350 MB of memory and a one-week time limit:
+Submit an rsync job named "foo" and request 350MB of memory and a one week time limit
 
 ```shell
-ssubmit --mem 350m --time 1w foo 'rsync -az src/ dest/'
+$ ssubmit -m 350m -t 1w foo "rsync -az src/ dest/"
 ```
 
-Request eight CPUs with the existing passthrough syntax:
+Submit a job that needs 8 CPUs
 
 ```shell
-ssubmit --mem 16g --time 1d align \
-  'minimap2 -t 8 ref.fa query.fq > out.paf' -- --cpus-per-task=8
+$ ssubmit -m 16g -t 1d align "minimap2 -t 8 ref.fa query.fq > out.paf" -- -c 8
 ```
 
-`NAME` is the Slurm job name. `COMMAND` is the command executed by a batch job
-and must be quoted. Options after `--` are passed directly to `sbatch`, so
-site-specific Slurm options remain available without new `ssubmit` flags.
+Start an interactive session with 5GB memory for 8 hours
+
+```shell
+$ ssubmit --interactive -m 5G -t 8h interactiveJob
+```
+
+Start an interactive session with custom shell and additional SLURM options
+
+```shell
+$ ssubmit --interactive -m 16G -t 4h DevSession --shell bash -- --partition=general --qos=normal
+```
+
+The basic anatomy of a `ssubmit` call is
+
+```
+ssubmit [OPTIONS] <NAME> [COMMAND] [-- <REMAINDER>...]
+```
+
+`NAME` is the name of the job (the `--job-name` parameter in `sbatch` or `salloc`).
+
+`COMMAND` is what you want to be executed by the job. For batch jobs, it **must** be quoted (single or
+double) and is required. For interactive jobs (`--interactive`), this is optional and defaults to starting an interactive shell session.
+
+`REMAINDER` is any (optional) [`sbatch`-specific options](https://slurm.schedmd.com/sbatch.html#lbAG) (for batch jobs) or [`salloc`-specific options](https://slurm.schedmd.com/salloc.html) (for interactive jobs) you want to pass on. These
+must follow a `--` after `COMMAND` (or after `NAME` if no command is provided for interactive jobs).
 
 ### Interactive jobs
 
-Interactive jobs use `salloc` and remain a human-oriented mode:
+You can start interactive job sessions using the `--interactive` (or `-i`) flag. This uses `salloc` instead of `sbatch` and automatically starts an interactive shell session.
 
 ```shell
-ssubmit --interactive --mem 5G --time 8h interactiveJob
-ssubmit --interactive --mem 16G --time 4h DevSession \
-  --shell bash -- --partition=general --qos=normal
+# Start an interactive session with default shell
+$ ssubmit --interactive -m 8G -t 4h my_session
+
+# Start an interactive session with a specific shell
+$ ssubmit --interactive --shell bash -m 16G -t 8h dev_work
+
+# Start an interactive session with additional SLURM options
+$ ssubmit --interactive -m 32G -t 12h gpu_session -- --partition=gpu --gres=gpu:1
 ```
+
+When using `--interactive`:
+
+- The command argument is optional and defaults to starting an interactive shell
+- If no command is provided, `ssubmit` will automatically detect your current shell and start an interactive session
+- You can specify a different shell using the `--shell` option
+- All the same memory and time parsing features work just like with batch jobs
+- Additional Slurm options can be passed after `--` just like with batch jobs
 
 Interactive jobs are not supported with `--json`.
 
-### Memory and time
+### Memory
 
-`--mem` accepts values such as `0.5g`, `4.3kb` and `9000`; values are converted
-to the Slurm memory format. `--time` accepts values such as `5d`, `10h` and
-`45m21s`, as well as Slurm's native time format. Set defaults with
-`SSUBMIT_MEMORY` and `SSUBMIT_TIME`.
+Memory (`-m,--mem`) is intended to be a little more user-friendly than the `sbatch
+--mem` option. For example, you can pass `-m 0.5g` and `ssubmit` will interpret and
+convert this as 500M. Units are case-insensitive. Memory values over 1M will be rounded up to the nearest whole number.
+For example, 1.1M will be rounded up to 2M. If you want to use the default memory limit of your cluster, then just pass
+`-m 0`.
+
+For simplicity's sake, all values over one megabyte are passed to sbatch as megabytes - e.g., 1.1G will be passed as 1100M.
+
+The environment variable `SSUBMIT_MEMORY` can be set to a default memory limit. This can be overridden by passing `-m`.
+
+### Time
+
+As with memory, time (`-t,--time`) is intended to be simple. If you want a time limit of
+three days, then just pass `-t 3d`. Want two and a half hours? Then `-t 2h30m` works. If
+you want to just use the default limit of your cluster, then just pass `-t 0`. You can
+also just pass the [time format `sbatch` uses](https://slurm.schedmd.com/sbatch.html#OPT_time) and this will be seamlessly passed on. For
+a full list of supported time units, check out the
+[`duration-str`](https://github.com/baoyachi/duration-str) repo. One thing to note is that passing a single digit, without a unit, will be interpreted by
+slurm as minutes. However, not providing a unit in the example of `5m3` will be interpreted as 5 minutes and 3 seconds.
+
+The environment variable `SSUBMIT_TIME` can be set to a default time limit. This can be overridden by passing `-t`.
 
 ### Environment export
 
-`ssubmit` preserves its existing default of `--export=ALL`. That can pass tokens,
-API keys and other environment variables into a job. Use a narrower export when
-the job does not need the full environment:
+By default, `ssubmit` exports all environment variables to the job using `--export=ALL`. This ensures that your job has access to the same environment as your current shell session.
+
+You can control which environment variables are exported using the `--export` option:
 
 ```shell
-ssubmit --export NONE --mem 2G analysis 'python script.py'
-ssubmit --export 'PATH,HOME,USER,PYTHONPATH' analysis 'python script.py'
+# Export all environment variables (default behavior)
+$ ssubmit -m 2g analysis "python script.py"
+
+# Export no environment variables
+$ ssubmit --export NONE -m 2g analysis "python script.py"
+
+# Export specific environment variables only
+$ ssubmit --export "PATH,HOME,USER,PYTHONPATH" -m 2g analysis "python script.py"
 ```
 
-The value is passed directly to `sbatch`. No recurring warning is emitted; this
-security consideration is documented here and in the Agent Skill.
+This option is passed directly to `sbatch` as `--export=<value>`, so it supports all the same values as the sbatch `--export` option. Common values include:
+- `ALL` - Export all environment variables (default)
+- `NONE` - Export no environment variables
+- Comma-separated list (e.g., `PATH,HOME`) - Export only the specified variables
 
-### Dry runs
+Note that if you specify `--export` in the remainder arguments (after `--`), it will override the default `--export=ALL` behavior.
 
-`--dry-run` prints the effective Slurm command and generated script without
-invoking Slurm:
+Because the default exports everything, a job can inherit tokens, API keys and
+other secrets from your shell. Use a narrower export when the job does not need
+the full environment. No recurring warning is emitted; this security
+consideration is documented here and in the Agent Skill.
+
+### Dry run
+
+You can see what `ssubmit` would do without actually submitting a job using dry run
+(`-n,--dry-run`). This will print the `sbatch` command (for batch jobs) or `salloc` command (for interactive jobs) that would have been executed.
+
+For batch jobs, it also shows the submission script:
 
 ```shell
-ssubmit --dry-run --mem 4G --time 1d dry 'rsync -az src/ dest/' -- --cpus-per-task=8
+$ ssubmit -n -m 4g -t 1d dry "rsync -az src/ dest/" -- -c 8
+[2022-01-19T08:58:58Z INFO  ssubmit] Dry run requested. Nothing submitted
+sbatch --export=ALL -c 8 <script>
+=====<script>=====
+#!/usr/bin/env bash
+#SBATCH --job-name=dry
+#SBATCH --mem=4000M
+#SBATCH --time=24:0:0
+#SBATCH --error=%x.err
+#SBATCH --output=%x.out
+set -euxo pipefail
+
+rsync -az src/ dest/
+=====<script>=====
 ```
+
+For interactive jobs, it shows the `salloc` command:
+
+```shell
+$ ssubmit --interactive -n -m 8G -t 4h my_session
+[2022-01-19T08:58:58Z INFO  ssubmit] Dry run requested. Nothing submitted
+salloc --job-name my_session --mem 8000M --time 4:0:0 srun --pty zsh -l
+```
+
+### Script settings
+
+The default shebang for the script is `#!/usr/bin/env bash`. However, if you'd prefer
+something else, pass this with `-S,--shebang` or set the environment variable `SSUBMIT_SHEBANG`.
+
+Additionally, we use `set -euxo pipefail` by default, which will exit when a command exits with a
+non-zero exit code (`e`), error when trying to use an unset variable (`u`), print
+all commands that were run to stderr (`x`), and exit if a command in a pipeline fails
+(`-o pipefail`). You can change these setting with `-s,--set` or the environment variable `SSUBMIT_SET`. You can turn this off
+by passing `-s ''`.
+
+### Log files
+
+By default, the stderr and stdout of the job are sent to `%x.err` and `%x.out`,
+respectively. `%x` is a filename pattern for job name. So if the job name is foo, the
+stderr file will be `foo.err`. You can see all available patterns in
+[the docs](https://slurm.schedmd.com/sbatch.html#SECTION_%3CB%3Efilename-pattern%3C/B%3E).
+You don't have to use patterns of course.
 
 ## Agent workflows
 
