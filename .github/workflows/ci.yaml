@@ -122,6 +122,18 @@ jobs:
       - name: Run cargo clippy
         run: just lint
 
+  agent-skill:
+    name: Agent Skill
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@just
+
+      - name: Validate Agent Skill and check discovery
+        run: just agent-skill
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

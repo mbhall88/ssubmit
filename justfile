@@ -11,3 +11,8 @@ test:
 # get coverage with tarpaulin
 coverage:
     cargo tarpaulin -t 300 -- --test-threads 1
+
+# validate the repository's Agent Skill and check skills CLI discovery
+agent-skill:
+    npx --yes skills-ref@latest validate skills/ssubmit
+    npx --yes skills@latest add . --skill ssubmit --list --full-depth
