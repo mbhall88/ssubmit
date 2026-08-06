@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/mbhall88/ssubmit/compare/1.2.0...1.3.0) (2026-08-06)
+
+
+### Features
+
+* add installable ssubmit agent skill ([#16](https://github.com/mbhall88/ssubmit/issues/16)) ([#23](https://github.com/mbhall88/ssubmit/issues/23)) ([de95bf5](https://github.com/mbhall88/ssubmit/commit/de95bf5188904beb1d7d1100de82a41654e6ad08))
+* add JSON scheduler test results ([#15](https://github.com/mbhall88/ssubmit/issues/15)) ([#22](https://github.com/mbhall88/ssubmit/issues/22)) ([cd3a835](https://github.com/mbhall88/ssubmit/commit/cd3a835cda302f07c17d0bda3fdb533555b381e4))
+* add versioned JSON job planning ([#13](https://github.com/mbhall88/ssubmit/issues/13)) ([#20](https://github.com/mbhall88/ssubmit/issues/20)) ([24e3462](https://github.com/mbhall88/ssubmit/commit/24e34622dc139ab24caeb6920ef17e55a17bebe5))
+* return structured JSON submission results ([#14](https://github.com/mbhall88/ssubmit/issues/14)) ([#21](https://github.com/mbhall88/ssubmit/issues/21)) ([0c0d3ed](https://github.com/mbhall88/ssubmit/commit/0c0d3edb90dc3bf5ec3406149caa88442c3fb183))
+
+
+### Bug Fixes
+
+* establish reliable batch CLI contract ([#12](https://github.com/mbhall88/ssubmit/issues/12)) ([484f055](https://github.com/mbhall88/ssubmit/commit/484f055ad3a1d2940da46d0701525e420f586fde))
+* replace dead installer URL ([b558c4b](https://github.com/mbhall88/ssubmit/commit/b558c4b2c6aab37e21166a453722d2b5e9d54cf5))
+
 ## [1.2.0](https://github.com/mbhall88/ssubmit/compare/1.1.0...1.2.0) (2025-08-07)
 
 
