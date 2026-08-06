@@ -24,6 +24,11 @@ targets = [
 ]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
+# .tar.gz rather than dist's .tar.xz default, for two reasons: it matches what
+# the hand-built workflow published, so install/install.sh keeps working through
+# the transition (see docs/releasing.md); and xz is not always present on the
+# older cluster login nodes this tool runs on, whereas gzip always is.
+unix-archive = ".tar.gz"
 # Where to host releases
 hosting = "github"
 # Whether to install an updater program

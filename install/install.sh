@@ -443,7 +443,10 @@ if [ "${PLATFORM}" = "pc-windows-msvc" ]; then
 fi
 
 VERSION=$(get_version_from_github)
-URL="${BASE_URL}/latest/download/${PROJECT}-${VERSION}-${TARGET}.${EXT}"
+# Release archives are built by dist, which names them <project>-<target> with
+# no version component (the version is already implied by the release the asset
+# hangs off). VERSION is still resolved above, for the prompt and the summary.
+URL="${BASE_URL}/latest/download/${PROJECT}-${TARGET}.${EXT}"
 info "Tarball URL: ${UNDERLINE}${BLUE}${URL}${NO_COLOR}"
 confirm "Install $PROJECT ${GREEN}v${VERSION} (latest)${NO_COLOR} to ${BOLD}${GREEN}${BIN_DIR}${NO_COLOR}?"
 check_bin_dir "${BIN_DIR}"

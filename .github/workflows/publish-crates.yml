@@ -5,6 +5,8 @@ name: Publish to crates.io
 on:
   workflow_call:
     inputs:
+      # Unused here, but dist's custom-publish-job contract always passes it.
+      # Removing it breaks the generated caller in release.yml.
       plan:
         required: true
         type: string
@@ -16,7 +18,8 @@ jobs:
   publish-crates:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v6 to match the checkout the generated release.yml uses.
+      - uses: actions/checkout@v6
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: cargo publish

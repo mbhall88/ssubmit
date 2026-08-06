@@ -57,8 +57,13 @@ Homebrew tap: `ssubmit` drives Slurm, which is a Unix/macOS concern.
 
 ## Changing the release pipeline
 
-`.github/workflows/release.yml` is generated. Never edit it by hand — change
-`dist-workspace.toml` and regenerate:
+`.github/workflows/release.yml` is generated. Its name and `.yml` extension are
+dictated by dist (the generated caller resolves
+`uses: ./.github/workflows/publish-crates.yml`), which is why these two files
+don't match the `.yaml` extension the rest of the workflows use. Don't "fix" it.
+
+Never edit the generated workflow by hand — change `dist-workspace.toml` and
+regenerate:
 
 ```shell
 dist generate
@@ -78,10 +83,25 @@ To see what a release would contain without building it:
 just dist-plan
 ```
 
+## Archive format
+
+`unix-archive = ".tar.gz"` overrides dist's `.tar.xz` default. Two reasons, both
+load-bearing:
+
+- It matches what the old workflow published, so `install/install.sh` keeps
+  working through the transition.
+- `xz` is not always installed on older cluster login nodes. `gzip` always is.
+
+Note that dist names archives `ssubmit-<target>.tar.gz` — **no version
+component**, unlike the old `ssubmit-<version>-<target>.tar.gz`. dist cannot put
+the version in the archive name, so `install/install.sh` was updated to drop it.
+Anyone pinning the old asset URLs needs to know this.
+
 ## Installer transition
 
 `install/install.sh`, served from GitHub raw, is the hand-written installer that
-predates dist. It is still the documented install method and still works.
+predates dist. It is still the documented install method and still works — it
+downloads from `releases/latest/download`, which dist keeps populated.
 
 dist generates its own `ssubmit-installer.sh` and attaches it to each Release.
 Once the first dist release is published and its installer has been verified

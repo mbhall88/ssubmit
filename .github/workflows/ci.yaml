@@ -135,16 +135,25 @@ jobs:
         run: just agent-skill
 
   dist:
-    name: Release config
+    name: Release config drift
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - uses: taiki-e/install-action@v2
-        with:
-          # Keep in sync with cargo-dist-version in dist-workspace.toml
-          tool: cargo-dist@0.32.0,just
+      - uses: taiki-e/install-action@just
+
+      # Read the pin out of dist-workspace.toml rather than restating it here,
+      # so bumping dist can't leave CI checking the config with the old dist.
+      # taiki-e/install-action has no cargo-dist manifest, so use dist's own
+      # installer.
+      - name: Install dist
+        run: |
+          version="$(sed -n 's/^cargo-dist-version = "\(.*\)"/\1/p' dist-workspace.toml)"
+          test -n "$version" || { echo "no cargo-dist-version in dist-workspace.toml"; exit 1; }
+          echo "Installing dist $version"
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/axodotdev/cargo-dist/releases/download/v${version}/cargo-dist-installer.sh" | sh
 
       # Fails if .github/workflows/release.yml has drifted from
       # dist-workspace.toml, i.e. if it was hand-edited instead of regenerated.
