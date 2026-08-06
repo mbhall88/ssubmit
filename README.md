@@ -341,9 +341,6 @@ ssubmit --json job 'command' -- --account=<account>
 ssubmit --json job 'command' -- --qos=<qos>
 ```
 
-Never invent a partition, account or QoS. Preserve the user's command, paths and
-resource requests.
-
 ### JSON contract
 
 JSON mode emits exactly one JSON object on stdout. Logs and diagnostics are on
@@ -367,16 +364,7 @@ and error patterns from `plan.job.output` and `plan.job.error` (`%x.out` and
 `--quiet`, which would suppress the identifier; duplicate `--parsable` options
 are resolved.
 
-### Cluster smoke test
-
-The release checklist for a real Slurm node is in
-[docs/agent-cluster-smoke-test.md](docs/agent-cluster-smoke-test.md). CI uses a
-fake `sbatch` executable and does not require a cluster.
-
 ## Full usage
-
-The block below is generated from the authoritative Clap definition with
-`cargo run --quiet -- --help`. Update it whenever the CLI help changes.
 
 ```text
 Submit sbatch jobs without having to create a submission script
