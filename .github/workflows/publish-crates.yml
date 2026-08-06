@@ -1,0 +1,25 @@
+name: Publish to crates.io
+
+# A dist custom publish job (see dist-workspace.toml's `publish-jobs`) — dist
+# has no builtin crates.io publisher, only Homebrew/npm.
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-crates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: cargo publish
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

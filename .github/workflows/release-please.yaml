@@ -1,21 +1,22 @@
+name: release-please
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
   pull-requests: write
 
-name: release-please
-
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/release-please-action@v3
+      - uses: googleapis/release-please-action@v5
         with:
-          release-type: rust
-          package-name: rasusa
-          include-v-in-tag: false
+          # A PAT (contents + pull-requests write) so release-please can open
+          # the release PR without enabling repo-wide Actions PR creation, and
+          # so the release PR triggers CI.
           token: ${{ secrets.PAT }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

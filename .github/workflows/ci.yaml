@@ -134,6 +134,26 @@ jobs:
       - name: Validate Agent Skill and check discovery
         run: just agent-skill
 
+  dist:
+    name: Release config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          # Keep in sync with cargo-dist-version in dist-workspace.toml
+          tool: cargo-dist@0.32.0,just
+
+      # Fails if .github/workflows/release.yml has drifted from
+      # dist-workspace.toml, i.e. if it was hand-edited instead of regenerated.
+      - name: Check release workflow is generated from config
+        run: just dist-check
+
+      - name: Show planned release artifacts
+        run: just dist-plan
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
